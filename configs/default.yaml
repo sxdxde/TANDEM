@@ -1,0 +1,39 @@
+# Default experiment configuration.
+#
+# Tier cost-model values here mirror the named constants in
+# src/kvtier/tiers.py (HOT_*, WARM_*_RATIO). If you change one, change the
+# other, or load this file via kvtier.tiers.load_tier_config() instead of
+# relying on the module's built-in defaults.
+
+tiers:
+  hot:
+    # Conventional DRAM/HBM tier, FP16 precision.
+    base_latency_ns: 20.0
+    latency_per_byte_ns: 0.01
+    base_energy_pj: 5.0
+    energy_per_byte_pj: 8.0
+    bytes_per_element: 2.0   # FP16
+
+  warm:
+    # Compute-in-memory tier, INT4 precision.
+    # energy ratio vs. HOT: 0.1  (~10x lower per-byte access energy)
+    # latency ratio vs. HOT: 1.5 (~1.5x higher per-access latency)
+    base_latency_ns: 30.0
+    latency_per_byte_ns: 0.015
+    base_energy_pj: 0.5
+    energy_per_byte_pj: 0.8
+    bytes_per_element: 0.5   # INT4
+
+trace:
+  n_text_tokens: 20
+  n_visual_tokens: 500
+  n_decode_steps: 64
+  salient_visual_fraction: 0.08   # fraction of visual tokens that stay consistently attended
+  recency_bias: 0.7               # mixing weight: recency vs. salience in synthetic attention
+  ema_decay: 0.9                  # importance EMA smoothing factor (higher = slower to update)
+  kv_elements_per_token: 128      # abstracted per-token K+V vector width used for size_bytes
+  seed: 0
+
+# Populated in later milestones (promotion/demotion thresholds, reconfiguration
+# cost, etc.) — left out of Milestone 1 on purpose so those numbers get their
+# own explicit sign-off rather than being guessed now.

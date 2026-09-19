@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+.DS_Store
+results/*.png
+!results/.gitkeep
+
+# Claude Code project-local state (settings, memory, session data) —
+# never intended to be pushed with project content.
+.claude/
+CLAUDE.local.md
