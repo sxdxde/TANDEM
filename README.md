@@ -60,9 +60,37 @@ visual-token accesses each step outweigh that once most of the trace's
 active entries live there. See
 `results/milestone2_baseline_comparison.csv`.
 
-Milestones 3–5 (dynamic hybrid policy + reconfiguration cost,
-comparison/sensitivity plots, real-VLM attention traces) are not yet
-implemented — see the milestone plan below.
+**Milestone 3** (dynamic hybrid policy + reconfiguration cost) is
+implemented: `monitor.py` tracks each entry's importance as a *live* EMA
+during simulation (reset to 0 at the start, updated once per step from
+only that step's attention weights — deliberately kept separate from
+`trace.py`'s full-session EMA, which would otherwise leak future decode
+steps into a live policy's decisions); `reconfig.py` charges a
+configurable multiple of a HOT access's cost on every tier change;
+`policy.py` adds `DynamicHybridPolicy`, which starts entries at their
+modality-prior tier and promotes/demotes based on live importance with
+hysteresis (`promote_threshold=0.006`, `demote_threshold=0.002`,
+`configs/default.yaml`).
+
+On the default config, `dynamic_hybrid` currently **loses** to
+`static_modality`: +67% more total energy and +2% more total latency,
+from 82 promotions + 64 demotions (146 reconfig events at 10x a HOT
+access each). The cause is visible in the per-step time series: visual
+entries created late in prefill get an artificially high attention weight
+in the first few decode steps purely from position-proximity (the trace's
+recency bias), which pushes their live EMA above `promote_threshold`
+almost immediately; as that recency term decays over the next ~20 steps,
+the non-salient ones fall back below `demote_threshold` and get demoted
+again. Nothing prevents an entry from round-tripping like this, and each
+round trip costs 10x a HOT access. This is reported as a finding, not
+patched around — it's exactly the trade-off Milestone 4's sensitivity
+sweep (over thresholds and reconfiguration cost) is meant to
+characterize: whether and where a dynamic hybrid's advantage over static
+tiering actually survives reconfiguration overhead. See
+`results/milestone3_comparison.csv`.
+
+Milestones 4–5 (comparison/sensitivity plots, real-VLM attention traces)
+are not yet implemented — see the milestone plan below.
 
 ## Repository structure
 
@@ -76,17 +104,17 @@ kvtier-memcentric/
     kv_entry.py             # TokenKV dataclass, Modality enum, Tier enum
     trace.py                # synthetic prefill+decode trace with attention weights
     tiers.py                # HOT/WARM per-access latency + energy cost model
-    policy.py               # FlatPolicy, StaticModalityPolicy; (M3) DynamicHybridPolicy
+    policy.py               # FlatPolicy, StaticModalityPolicy, DynamicHybridPolicy
+    monitor.py              # live per-entry importance EMA (separate from trace.py's)
+    reconfig.py             # promotion/demotion cost model
     simulator.py            # SimPy environment driving a trace through a policy
     metrics.py              # energy/latency/footprint aggregation + comparison tables
-    monitor.py              # (M3) per-entry importance tracker
-    reconfig.py             # (M3) promotion/demotion cost model
     viz.py                  # (M4) timeline + comparison plots
   experiments/
     validate_trace.py       # Milestone 1 checkpoint
     run_flat_baseline.py    # Milestone 2 checkpoint
     run_static_modality.py  # Milestone 2 checkpoint
-    run_dynamic_hybrid.py   # (M3)
+    run_dynamic_hybrid.py   # Milestone 3 checkpoint
     compare_all.py          # (M4)
   tests/
   results/
@@ -121,6 +149,18 @@ final memory footprint) and writes its per-step time series to
 `results/*_timeseries.csv`. A combined comparison table is at
 `results/milestone2_baseline_comparison.csv`.
 
+## Running the Milestone 3 checkpoint
+
+```bash
+python experiments/run_dynamic_hybrid.py
+```
+
+Prints the same summary as the baselines, plus reconfiguration overhead
+(latency, energy) broken out as its own line and the promotion/demotion
+counts. A combined comparison against both M2 baselines is at
+`results/milestone3_comparison.csv` — see the Status section above for
+what it currently shows.
+
 ## Tests
 
 ```bash
@@ -144,12 +184,29 @@ runtime:
   (0.5 bytes/element), consistent with KV-cache quantization results in the
   literature above (e.g. HybridKV, ZipVL).
 
+## Cost-model assumptions (Milestone 3)
+
+`configs/default.yaml`'s `policy.dynamic_hybrid` and `reconfig` blocks,
+also explicit named constants:
+
+- **Promotion/demotion thresholds**: `promote_threshold=0.006`,
+  `demote_threshold=0.002` on the live importance EMA. Chosen relative to
+  Milestone 1's validation plot, where salient visual tokens converge to
+  ~0.0088 and average TEXT to ~0.005-0.006 — i.e. promotion is meant to
+  trigger around text-level importance or higher. The hysteresis band
+  between them turned out not to be wide enough to suppress
+  recency-driven promotion churn on the default trace; see the Status
+  section above.
+- **Reconfiguration cost multiplier**: `10.0` — a tier move (read +
+  requantize + write) costs 10x a single HOT access, in both latency and
+  energy, applied identically regardless of direction (`reconfig.py`).
+
 ## Milestone plan
 
 1. **Synthetic trace + tier cost model** (no simulator) — done.
 2. **SimPy simulator + flat and static-modality baselines** — done.
 3. **Dynamic hybrid policy + reconfiguration cost**, with promotion/demotion
-   counts and reconfiguration overhead broken out as their own metric.
+   counts and reconfiguration overhead broken out as their own metric — done.
 4. **Comparison, visualization, sensitivity** — bar charts of total
    energy/latency across the three policies, a tier-over-time timeline plot,
    and a sensitivity sweep over thresholds and reconfiguration penalty

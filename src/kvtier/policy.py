@@ -1,9 +1,10 @@
 """Placement policies: decide which tier a KV entry lives in.
 
-Milestone 2 policies are static — they set each entry's tier once, at
-creation, and never revisit it. Milestone 3 adds ``DynamicHybridPolicy``,
-which uses ``update()`` every decode step to promote/demote entries based
-on their live importance (see ``monitor.py``).
+Milestone 2's policies are static — they set each entry's tier once, at
+creation, and never revisit it. Milestone 3's ``DynamicHybridPolicy`` uses
+``update()`` every decode step to promote/demote entries based on their
+live importance (see ``monitor.py``), with hysteresis (two distinct
+thresholds) so an entry near the boundary doesn't flap tiers every step.
 """
 
 from __future__ import annotations
@@ -52,4 +53,35 @@ class StaticModalityPolicy:
         return Tier.WARM if entry.modality == Modality.VISUAL else Tier.HOT
 
     def update(self, entry: TokenKV) -> Tier:
+        return entry.tier
+
+
+class DynamicHybridPolicy:
+    """Starts entries at their modality-prior tier, then promotes/demotes
+    based on live importance, with hysteresis to avoid flapping.
+
+    - WARM -> HOT once ``entry.importance`` exceeds ``promote_threshold``.
+    - HOT -> WARM once ``entry.importance`` falls below ``demote_threshold``.
+
+    ``promote_threshold`` must be strictly greater than ``demote_threshold``
+    so there is a dead band between them where an entry holds its current
+    tier regardless of which direction it arrived from.
+    """
+
+    name = "dynamic_hybrid"
+
+    def __init__(self, promote_threshold: float, demote_threshold: float):
+        if not demote_threshold < promote_threshold:
+            raise ValueError("demote_threshold must be < promote_threshold (hysteresis band)")
+        self.promote_threshold = promote_threshold
+        self.demote_threshold = demote_threshold
+
+    def initial_tier(self, entry: TokenKV) -> Tier:
+        return Tier.WARM if entry.modality == Modality.VISUAL else Tier.HOT
+
+    def update(self, entry: TokenKV) -> Tier:
+        if entry.tier == Tier.WARM and entry.importance > self.promote_threshold:
+            return Tier.HOT
+        if entry.tier == Tier.HOT and entry.importance < self.demote_threshold:
+            return Tier.WARM
         return entry.tier

@@ -34,6 +34,17 @@ trace:
   kv_elements_per_token: 128      # abstracted per-token K+V vector width used for size_bytes
   seed: 0
 
-# Populated in later milestones (promotion/demotion thresholds, reconfiguration
-# cost, etc.) — left out of Milestone 1 on purpose so those numbers get their
-# own explicit sign-off rather than being guessed now.
+policy:
+  dynamic_hybrid:
+    # Hysteresis band on the live importance EMA (same ema_decay as above,
+    # but computed live during simulation — see monitor.py). Per Milestone
+    # 1's validation plot, salient visual tokens converge to ~0.0088 and
+    # average TEXT to ~0.005-0.006, so:
+    promote_threshold: 0.006   # WARM -> HOT once importance exceeds this
+    demote_threshold: 0.002    # HOT -> WARM once importance falls below this
+
+reconfig:
+  # Reconfiguration cost, as a multiple of one HOT access's (latency,
+  # energy) — see reconfig.py for why a tier move costs more than a
+  # normal lookup (read + requantize + write, not a pointer update).
+  cost_multiplier: 10.0
