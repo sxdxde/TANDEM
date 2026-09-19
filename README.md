@@ -46,9 +46,23 @@ generator reproduces the literature's reported pattern (visual tokens'
 average importance declining while a small salient minority stays high)
 before anything is built on top of it.
 
-Milestones 2–5 (SimPy simulator, baselines, dynamic hybrid policy +
-reconfiguration cost, comparison/sensitivity plots, real-VLM attention
-traces) are not yet implemented — see the milestone plan below.
+**Milestone 2** (SimPy simulator + flat and static-modality baselines) is
+implemented: `simulator.py` walks a trace session step by step inside a
+SimPy process, charging each active entry's current tier for that step's
+attention lookup; `policy.py` adds the two static baselines (`FlatPolicy`,
+`StaticModalityPolicy`); `metrics.py` aggregates per-step energy, latency,
+and per-tier memory footprint into a comparison table. On the default
+config (20 text + 500 visual prefill tokens, 64 decode steps),
+`static_modality` cuts total energy by ~88% versus `flat` at the cost of
+~34% higher total latency — WARM's much lower per-byte energy wins on
+energy, but its higher per-access base latency and the sheer number of
+visual-token accesses each step outweigh that once most of the trace's
+active entries live there. See
+`results/milestone2_baseline_comparison.csv`.
+
+Milestones 3–5 (dynamic hybrid policy + reconfiguration cost,
+comparison/sensitivity plots, real-VLM attention traces) are not yet
+implemented — see the milestone plan below.
 
 ## Repository structure
 
@@ -59,21 +73,21 @@ kvtier-memcentric/
   configs/
     default.yaml          # tier costs, trace generation parameters
   src/kvtier/
-    kv_entry.py            # TokenKV dataclass, Modality enum, Tier enum
+    kv_entry.py             # TokenKV dataclass, Modality enum, Tier enum
     trace.py                # synthetic prefill+decode trace with attention weights
     tiers.py                # HOT/WARM per-access latency + energy cost model
-    monitor.py               # (M3) per-entry importance tracker
-    policy.py                 # (M2/M3) placement policies
-    reconfig.py                # (M3) promotion/demotion cost model
-    simulator.py                 # (M2) SimPy environment
-    metrics.py                    # (M2) energy/latency/promotion-count aggregation
-    viz.py                         # (M4) timeline + comparison plots
+    policy.py               # FlatPolicy, StaticModalityPolicy; (M3) DynamicHybridPolicy
+    simulator.py            # SimPy environment driving a trace through a policy
+    metrics.py              # energy/latency/footprint aggregation + comparison tables
+    monitor.py              # (M3) per-entry importance tracker
+    reconfig.py             # (M3) promotion/demotion cost model
+    viz.py                  # (M4) timeline + comparison plots
   experiments/
-    validate_trace.py      # Milestone 1 checkpoint
-    run_flat_baseline.py         # (M2)
-    run_static_modality.py        # (M2)
-    run_dynamic_hybrid.py          # (M3)
-    compare_all.py                  # (M4)
+    validate_trace.py       # Milestone 1 checkpoint
+    run_flat_baseline.py    # Milestone 2 checkpoint
+    run_static_modality.py  # Milestone 2 checkpoint
+    run_dynamic_hybrid.py   # (M3)
+    compare_all.py          # (M4)
   tests/
   results/
 ```
@@ -94,6 +108,18 @@ python experiments/validate_trace.py
 This writes `results/importance_by_modality.png` and prints final average
 importance per group (TEXT, all VISUAL, salient VISUAL subset, non-salient
 VISUAL).
+
+## Running the Milestone 2 checkpoint
+
+```bash
+python experiments/run_flat_baseline.py
+python experiments/run_static_modality.py
+```
+
+Each prints a summary (total latency, total energy, per-tier breakdown,
+final memory footprint) and writes its per-step time series to
+`results/*_timeseries.csv`. A combined comparison table is at
+`results/milestone2_baseline_comparison.csv`.
 
 ## Tests
 
@@ -121,7 +147,7 @@ runtime:
 ## Milestone plan
 
 1. **Synthetic trace + tier cost model** (no simulator) — done.
-2. **SimPy simulator + flat and static-modality baselines.**
+2. **SimPy simulator + flat and static-modality baselines** — done.
 3. **Dynamic hybrid policy + reconfiguration cost**, with promotion/demotion
    counts and reconfiguration overhead broken out as their own metric.
 4. **Comparison, visualization, sensitivity** — bar charts of total

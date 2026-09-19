@@ -1,0 +1,3 @@
+policy,total_latency_ns,total_energy_pj,hot_latency_ns,warm_latency_ns,hot_energy_pj,warm_energy_pj,reconfig_latency_ns,reconfig_energy_pj,n_promotions,n_demotions,final_hot_footprint_bytes,final_warm_footprint_bytes,energy_reduction_vs_flat_pct,latency_increase_vs_flat_pct
+flat,797721.599999998,72594080.0,797721.599999998,0.0,72594080.0,0.0,0.0,0.0,0,0,149504.0,0.0,0.0,0.0
+static_modality,1066521.5999999873,8552479.999999907,75801.5999999999,990719.9999999874,6898080.0,1654400.0000000147,0.0,0.0,0,0,21504.0,32000.0,88.21876384410422,33.695966111484246
