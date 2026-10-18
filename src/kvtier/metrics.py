@@ -33,6 +33,11 @@ class StepMetrics:
     reconfig_energy_pj: float = 0.0
     n_promotions: int = 0
     n_demotions: int = 0
+    # Milestone 4: attention-weighted quantization error this step
+    # (sum of attention_weight * tier.quant_error) and the attention mass
+    # that was served from WARM (0..1, since weights sum to 1 per step).
+    quality_loss: float = 0.0
+    warm_attention_mass: float = 0.0
 
 
 @dataclass
@@ -65,6 +70,16 @@ class SessionMetrics:
     @property
     def total_demotions(self) -> int:
         return sum(s.n_demotions for s in self.steps)
+
+    @property
+    def mean_quality_loss(self) -> float:
+        """Mean per-step attention-weighted quantization error."""
+        return sum(s.quality_loss for s in self.steps) / len(self.steps) if self.steps else 0.0
+
+    @property
+    def mean_warm_attention_mass(self) -> float:
+        """Mean fraction of attention mass served from the WARM (INT4) tier."""
+        return sum(s.warm_attention_mass for s in self.steps) / len(self.steps) if self.steps else 0.0
 
     def total_latency_by_tier(self) -> dict[Tier, float]:
         return {
@@ -100,6 +115,8 @@ class SessionMetrics:
             "reconfig_energy_pj": self.total_reconfig_energy_pj,
             "n_promotions": self.total_promotions,
             "n_demotions": self.total_demotions,
+            "mean_quality_loss": self.mean_quality_loss,
+            "warm_attention_mass_pct": 100 * self.mean_warm_attention_mass,
             "final_hot_footprint_bytes": footprint[Tier.HOT],
             "final_warm_footprint_bytes": footprint[Tier.WARM],
         }
@@ -125,6 +142,8 @@ class SessionMetrics:
                     "reconfig_energy_pj": s.reconfig_energy_pj,
                     "n_promotions": s.n_promotions,
                     "n_demotions": s.n_demotions,
+                    "quality_loss": s.quality_loss,
+                    "warm_attention_mass": s.warm_attention_mass,
                 }
             )
         return pd.DataFrame(rows)
@@ -154,6 +173,10 @@ def print_summary(metrics: SessionMetrics) -> None:
             f"{s['reconfig_energy_pj']:,.1f} pJ  "
             f"({s['n_promotions']} promotions, {s['n_demotions']} demotions)"
         )
+    print(
+        f"quality:         mean loss {s['mean_quality_loss']:.5f}  |  "
+        f"{s['warm_attention_mass_pct']:.1f}% of attention mass served from WARM"
+    )
     print(
         f"final footprint: HOT {s['final_hot_footprint_bytes']:,.0f} B  |  "
         f"WARM {s['final_warm_footprint_bytes']:,.0f} B"

@@ -89,8 +89,17 @@ characterize: whether and where a dynamic hybrid's advantage over static
 tiering actually survives reconfiguration overhead. See
 `results/milestone3_comparison.csv`.
 
-Milestones 4–5 (comparison/sensitivity plots, real-VLM attention traces)
-are not yet implemented — see the milestone plan below.
+**Milestone 4** (comparison, visualization, sensitivity) is implemented. A
+quality penalty was added (`quant_error` per tier, attention-weighted) because
+an energy/latency-only comparison was degenerate: an all-WARM policy beat
+everything. With quality included, `dynamic_hybrid` trades +67% energy for
+-45% quality loss vs `static_modality` at the default config; see `NOTES.md`
+for the full log of observations and caveats (the 0.05 INT4 error is an
+assumption). Run `experiments/make_plots.py` and
+`experiments/run_sensitivity.py`; outputs are in `results/`.
+
+Milestone 5 (real-VLM attention traces) is not yet implemented — see the
+milestone plan below.
 
 ## Repository structure
 
@@ -207,7 +216,7 @@ also explicit named constants:
 2. **SimPy simulator + flat and static-modality baselines** — done.
 3. **Dynamic hybrid policy + reconfiguration cost**, with promotion/demotion
    counts and reconfiguration overhead broken out as their own metric — done.
-4. **Comparison, visualization, sensitivity** — bar charts of total
+4. **Comparison, visualization, sensitivity** — done: bar charts of total
    energy/latency across the three policies, a tier-over-time timeline plot,
    and a sensitivity sweep over thresholds and reconfiguration penalty
    showing how the dynamic hybrid's advantage shrinks as reconfiguration

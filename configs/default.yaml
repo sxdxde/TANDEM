@@ -13,6 +13,7 @@ tiers:
     base_energy_pj: 5.0
     energy_per_byte_pj: 8.0
     bytes_per_element: 2.0   # FP16
+    quant_error: 0.0         # lossless reference (Milestone 4)
 
   warm:
     # Compute-in-memory tier, INT4 precision.
@@ -23,6 +24,7 @@ tiers:
     base_energy_pj: 0.5
     energy_per_byte_pj: 0.8
     bytes_per_element: 0.5   # INT4
+    quant_error: 0.05        # assumed relative INT4 error, not measured (Milestone 4)
 
 trace:
   n_text_tokens: 20

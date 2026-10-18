@@ -53,6 +53,14 @@ WARM_ENERGY_RATIO: float = 0.1   # ~10x lower per-byte access energy than HOT
 WARM_LATENCY_RATIO: float = 1.5  # ~1.5x higher per-access latency than HOT
 WARM_BYTES_PER_ELEMENT: float = 0.5  # INT4
 
+# Relative quantization error of a value read from each tier (Milestone 4).
+# HOT is FP16 (treated as lossless reference); WARM is INT4. 0.05 is an
+# assumed order-of-magnitude relative error for per-group INT4 KV
+# quantization, NOT a measured value -- see NOTES.md. Only the ratio to
+# other tiers matters for policy comparisons, but sweeps should vary it.
+HOT_QUANT_ERROR: float = 0.0
+WARM_QUANT_ERROR: float = 0.05
+
 
 @dataclass(frozen=True)
 class TierResource:
@@ -64,6 +72,7 @@ class TierResource:
     base_energy_pj: float
     energy_per_byte_pj: float
     bytes_per_element: float
+    quant_error: float = 0.0  # relative error of reads from this tier
 
     def effective_size_bytes(self, entry: TokenKV) -> float:
         """Rescale ``entry.size_bytes`` (stored at HOT/FP16 granularity) to
@@ -87,6 +96,7 @@ def _default_hot() -> TierResource:
         base_energy_pj=HOT_BASE_ENERGY_PJ,
         energy_per_byte_pj=HOT_ENERGY_PJ_PER_BYTE,
         bytes_per_element=HOT_BYTES_PER_ELEMENT,
+        quant_error=HOT_QUANT_ERROR,
     )
 
 
@@ -98,6 +108,7 @@ def _default_warm() -> TierResource:
         base_energy_pj=HOT_BASE_ENERGY_PJ * WARM_ENERGY_RATIO,
         energy_per_byte_pj=HOT_ENERGY_PJ_PER_BYTE * WARM_ENERGY_RATIO,
         bytes_per_element=WARM_BYTES_PER_ELEMENT,
+        quant_error=WARM_QUANT_ERROR,
     )
 
 
@@ -127,5 +138,6 @@ def load_tier_config(path: str | Path) -> dict[Tier, TierResource]:
             base_energy_pj=cfg["base_energy_pj"],
             energy_per_byte_pj=cfg["energy_per_byte_pj"],
             bytes_per_element=cfg["bytes_per_element"],
+            quant_error=cfg.get("quant_error", 0.0),
         )
     return result

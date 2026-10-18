@@ -102,3 +102,22 @@ def test_dynamic_hybrid_tier_changes_tracked_on_entries():
     metrics = run_session(session, policy, ema_decay=0.9)
     total_tier_changes = sum(e.tier_changes for e in session.entries)
     assert total_tier_changes == metrics.total_promotions + metrics.total_demotions
+
+
+def test_flat_policy_has_zero_quality_loss():
+    metrics = run_session(_small_session(), FlatPolicy())
+    assert metrics.mean_quality_loss == 0.0
+    assert metrics.mean_warm_attention_mass == 0.0
+
+
+def test_quality_loss_equals_warm_mass_times_warm_error():
+    from kvtier.tiers import get_tier
+
+    metrics = run_session(_small_session(), StaticModalityPolicy())
+    warm_error = get_tier(Tier.WARM).quant_error
+    assert metrics.mean_warm_attention_mass > 0.0
+    assert metrics.mean_quality_loss == pytest.approx(
+        metrics.mean_warm_attention_mass * warm_error
+    )
+    for s in metrics.steps:
+        assert 0.0 <= s.warm_attention_mass <= 1.0 + 1e-9

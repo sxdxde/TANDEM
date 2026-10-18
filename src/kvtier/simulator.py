@@ -6,7 +6,8 @@ covers every position active at that step. This module walks the trace
 step by step inside a SimPy process. Each step:
 
 1. Charges every active entry's *current* tier for that step's attention
-   lookup (via ``TierResource.access_cost``) and advances the simulated
+   lookup, and accrues quality loss (attention weight x the tier's
+   ``quant_error``) (via ``TierResource.access_cost``) and advances the simulated
    clock by the total access latency.
 2. Updates every entry's live importance from this step's attention
    weights (``monitor.ImportanceMonitor`` — see that module for why this
@@ -73,9 +74,14 @@ def run_session(
             tier_latency = {t: 0.0 for t in Tier}
             tier_energy = {t: 0.0 for t in Tier}
             tier_access_counts = {t: 0 for t in Tier}
+            quality_loss = 0.0
+            warm_mass = 0.0
 
-            for pos in step.attention_weights:
+            for pos, weight in step.attention_weights.items():
                 entry = active[pos]
+                quality_loss += weight * tiers[entry.tier].quant_error
+                if entry.tier == Tier.WARM:
+                    warm_mass += weight
                 latency, energy = tiers[entry.tier].access_cost(entry)
                 step_latency += latency
                 step_energy += energy
@@ -124,6 +130,8 @@ def run_session(
                     reconfig_energy_pj=reconfig_energy,
                     n_promotions=n_promotions,
                     n_demotions=n_demotions,
+                    quality_loss=quality_loss,
+                    warm_attention_mass=warm_mass,
                 )
             )
 
