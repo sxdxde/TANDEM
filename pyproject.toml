@@ -18,6 +18,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Only needed to re-extract real traces (experiments/extract_vlm_trace.py);
+# the simulator, policies and run_real_trace.py do not need them.
+vlm = ["torch>=2.2", "transformers>=4.50", "pillow>=10"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/kvtier"]

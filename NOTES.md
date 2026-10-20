@@ -145,11 +145,72 @@ Observations:
   Not adopted as default: efficiency is a heuristic, and the right operating point depends on
   how the user weighs energy against quality.
 
+## M5: real VLM attention traces (SmolVLM-256M-Instruct)
+Setup: `experiments/extract_vlm_trace.py` (optional deps: `pip install -e .[vlm]`; torch 2.14,
+transformers 5.20, CPU float32, eager attention) runs the model on 3 locally generated
+images (chart / scene / noise+label), greedy-decodes 64 tokens, and records each decode
+step's attention row averaged over all 30 layers x 9 heads. `src/kvtier/real_trace.py`
+(torch-free, tested) converts them into a `TraceSession`; saved in `traces/*.npz`.
+Alignment: last prompt token = decode step 0's query, so prefill = first L-1 positions.
+The model answered correctly on all three images (bar chart / triangle+square / "Hello"),
+so the traces are from a model that is really using the image.
+
+Trace statistics (layer/head-averaged; ~876 prefill entries, 832 of them visual = 95%):
+
+| quantity | chart | scene | noise_label |
+|---|---|---|---|
+| attention mass on visual tokens | 6% | 7% | 5% |
+| attention sink (position 0) | 35% | 34% | 34% |
+| mass on generated tokens | 36% | 37% | 37% |
+| top 8% of visual tokens' share of visual mass | 63% | 70% | 61% |
+| top-8% set overlap, first vs last step | 74% | 83% | 77% |
+| median visual token's EMA vs uniform (1/N) | 0.02x | 0.02x | 0.02x |
+
+Observations:
+- **Heavy-tailed, persistent visual salience holds** on real data (the synthetic premise).
+- **But visual tokens get far less attention than the synthetic trace assumed**: ~6% of mass
+  vs 68% of mass served from WARM under static_modality in the synthetic trace. The synthetic
+  trace badly overstated how much attention the WARM tier would serve.
+- A huge attention sink (~35% at position 0) and recency (generated tokens ~36%) dominate.
+  Position 0 is TEXT, so the modality prior keeps it HOT: correct for free.
+- **Synthetic-calibrated thresholds don't transfer**: uniform attention is ~0.0011 and the
+  99th-percentile visual EMA is ~0.0008, below the 0.006 promote threshold, so nothing visual
+  is ever promoted. With them, dynamic only demotes text: -23..-27% energy, +37..+42%
+  quality loss vs static on every real trace. Thresholds had to be re-expressed as
+  multiples of uniform attention (1/n_prefill).
+- **Pre-registered protocol** (`experiments/run_real_trace.py`): pick thresholds on chart +
+  scene (lowest energy with quality loss <= static), test on held-out noise_label.
+  Chosen: promote 2.0x / demote 0.4x uniform. Train mean: -6.6% energy, -2.5% quality loss.
+  **Held-out: -14.4% energy but +11.9% quality loss (0.0027 -> 0.0031). The no-worse-quality
+  criterion FAILED on the held-out trace.** Train per-trace was also mixed (chart +5.1% quality
+  loss, scene -10.0%).
+- Absolute stakes are small: static_modality's quality loss is only ~0.003 (floor 0, WARM-only
+  0.05). Static modality placement already captures nearly everything on real traces:
+  flat -> static is -88..-90% energy for ~0.003 quality loss; dynamic moves energy by only
+  about +-10% around that.
+- Bottom line: **on real SmolVLM traces the synthetic M4 result does not replicate**. The
+  "+55% energy buys -49% quality loss" trade existed because the synthetic trace put heavy
+  attention on WARM-resident salient visual tokens. With real attention, the dynamic policy's
+  benefit is at best marginal and not robust on a held-out trace (n=3 traces, 1 model).
+
+Per-layer check (chart, 16 steps; scratch analysis, not saved as a script): the
+layer-averaged 6% hides large variation. Visual attention mass per layer ranges from ~3% to
+39% (layer 0: 39%, up to 70% for the strongest head; layers 21-24 ~ 20%). The sink is ~0% in
+layers 0-1 and 11, 40-78% in layers 12-30. So the single-entry-per-token abstraction (one
+averaged weight per token) is a real modelling limitation: real KV caches are per-layer/head,
+and per-layer placement could have more to gain than this averaged view shows.
+
 ## Open questions / caveats
-- The synthetic trace is the only workload; text gets very little attention. Results
-  on the text-demotion side likely do not transfer to real VLMs (M5).
+- Synthetic M4 conclusions did not replicate on real traces (see M5); treat the M4
+  quality-vs-energy numbers as a property of the synthetic trace, not of VLMs.
+- Real-trace evidence is thin: 1 model (256M), 3 synthetic images, 64 decode steps, n=3
+  traces, a single held-out trace. Natural photos/documents and larger models untested.
 - WARM quant error 0.05 is an assumption; the energy/quality trade-off scales with it.
 - Latency is a serialized total-work figure (see `metrics.py`), not wall-clock.
+- Next candidates: per-layer (or per-head-group) entries instead of layer-averaged weights;
+  sparse-attention cost model (the simulator charges every entry every step, whereas real
+  systems skip low-attention tokens, which is the bigger lever); measure the INT4 error
+  instead of assuming 0.05; natural images / larger VLM.
 - No quality-aware policy yet. The policy never sees quality; a promotion rule that
   targets attention-weighted loss directly, or a warmup / recency-damping fix for the
   boundary churn, is the natural next step.
@@ -159,5 +220,6 @@ Observations:
 ## Artifacts
 - `results/sensitivity_sweep.csv`, `results/sensitivity_references.csv`
 - `results/milestone4_comparison.csv`, `comparison_bars.png`, `tier_timeline.png`
+- `traces/{chart,scene,noise_label}.npz`, `results/real_trace_results.csv`, `results/real_trace_sweep.csv`
 - `results/damping_sweep.csv`
 - `results/sensitivity_pareto.png`, `sensitivity_reconfig_cost.png`, `sensitivity_thresholds.png`

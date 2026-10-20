@@ -99,8 +99,14 @@ assumption). The dynamic policy now defaults to `warmup_steps: 2` (see the M4b
 section of `NOTES.md`). Run `experiments/make_plots.py` and
 `experiments/run_sensitivity.py`; outputs are in `results/`.
 
-Milestone 5 (real-VLM attention traces) is not yet implemented — see the
-milestone plan below.
+**Milestone 5** (real attention traces from SmolVLM-256M) is implemented
+(`experiments/extract_vlm_trace.py`, `experiments/run_real_trace.py`, traces in
+`traces/`). Headline: the M4 trade-off does **not** replicate on real traces.
+Visual tokens receive only ~6% of attention (vs 68% of mass served from WARM
+in the synthetic trace), so `static_modality` is already near the quality
+floor and the dynamic policy's benefit is marginal and failed a held-out
+check. See `NOTES.md` for the full analysis and caveats (3 traces, 1 model,
+layer-averaged attention).
 
 ## Repository structure
 
@@ -222,7 +228,7 @@ also explicit named constants:
    and a sensitivity sweep over thresholds and reconfiguration penalty
    showing how the dynamic hybrid's advantage shrinks as reconfiguration
    cost grows.
-5. **(Stretch) Real VLM attention traces** — replace the synthetic trace with
+5. **Real VLM attention traces** (stretch) — done, see NOTES.md — replace the synthetic trace with
    real attention weights hooked from a small open VLM, plus an oracle
    comparison against ground-truth top-k attended tokens.
 # KV-Cache-Tier
