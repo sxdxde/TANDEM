@@ -121,3 +121,25 @@ def test_quality_loss_equals_warm_mass_times_warm_error():
     )
     for s in metrics.steps:
         assert 0.0 <= s.warm_attention_mass <= 1.0 + 1e-9
+
+
+def test_sparse_access_reads_fewer_entries_and_reports_skipped_mass():
+    from kvtier.simulator import SparseAccess
+
+    session = _small_session()
+    dense = run_session(session, FlatPolicy())
+    sparse = run_session(_small_session(), FlatPolicy(), sparse=SparseAccess(top_k_fraction=0.2))
+    assert sparse.total_energy_pj < dense.total_energy_pj
+    assert dense.mean_skipped_attention_mass == 0.0
+    assert 0.0 < sparse.mean_skipped_attention_mass < 1.0
+    # step 0 has no importance signal -> read densely
+    assert sparse.steps[0].skipped_attention_mass == 0.0
+
+
+def test_sparse_skipped_mass_is_policy_independent():
+    from kvtier.simulator import SparseAccess
+
+    sp = SparseAccess(top_k_fraction=0.2)
+    a = run_session(_small_session(), FlatPolicy(), sparse=sp)
+    b = run_session(_small_session(), StaticModalityPolicy(), sparse=sp)
+    assert a.mean_skipped_attention_mass == pytest.approx(b.mean_skipped_attention_mass)

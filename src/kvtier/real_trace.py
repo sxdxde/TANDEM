@@ -85,3 +85,79 @@ def load_trace(path: str | Path, **kwargs) -> TraceSession:
         bounds = np.cumsum(z["lengths"])[:-1]
         step_weights = np.split(z["weights"], bounds)
     return trace_from_attention(is_visual, step_weights, **kwargs)
+
+
+def trace_from_layer_attention(
+    is_visual: np.ndarray,
+    step_layer_weights: list[np.ndarray],
+    kv_elements_per_token: int = DEFAULT_KV_ELEMENTS_PER_TOKEN,
+    layer_stride: int = 1,
+) -> TraceSession:
+    """Per-layer variant (Milestone 6): one KV entry per (token, layer).
+
+    ``step_layer_weights[t]`` has shape ``(n_layers, n_prefill + t + 1)``.
+    Entry position id is ``token * n_layers_kept + layer_index``. Each
+    layer's row is renormalised to sum to 1 and the step's weights are
+    divided by the number of layers, so total attention mass per step is 1
+    and the quality metrics keep their meaning (mean over layers).
+    ``layer_stride > 1`` keeps every k-th layer, to bound simulation cost.
+    Each per-layer entry has the same abstract size as a single-entry token,
+    so absolute energies are ~n_layers x the layer-averaged traces; compare
+    ratios, not absolutes, across the two trace types.
+    """
+    n_prefill = len(is_visual)
+    size_bytes = kv_elements_per_token * HOT_BYTES_PER_ELEMENT
+    first = np.asarray(step_layer_weights[0])[::layer_stride]
+    n_layers = first.shape[0]
+
+    def make(token: int, layer: int, modality: Modality) -> TokenKV:
+        return TokenKV(
+            position=token * n_layers + layer,
+            modality=modality,
+            size_bytes=size_bytes,
+            tier=Tier.HOT,
+        )
+
+    session = TraceSession(entries=[])
+    for tok, v in enumerate(is_visual):
+        for layer in range(n_layers):
+            session.entries.append(make(tok, layer, Modality.VISUAL if v else Modality.TEXT))
+
+    for t, w in enumerate(step_layer_weights):
+        w = np.clip(np.asarray(w, dtype=float)[::layer_stride], 0.0, None)
+        expected = n_prefill + t + 1
+        if w.shape != (n_layers, expected):
+            raise ValueError(f"step {t}: expected {(n_layers, expected)}, got {w.shape}")
+        w = w / w.sum(axis=1, keepdims=True) / n_layers
+        tok = n_prefill + t
+        new_positions = []
+        for layer in range(n_layers):
+            e = make(tok, layer, Modality.TEXT)
+            session.entries.append(e)
+            new_positions.append(e.position)
+        session.steps.append(
+            DecodeStep(
+                step=t,
+                new_entry_position=new_positions[0],
+                extra_new_positions=new_positions[1:],
+                attention_weights={
+                    token * n_layers + layer: float(w[layer, token])
+                    for token in range(expected)
+                    for layer in range(n_layers)
+                },
+            )
+        )
+    return session
+
+
+def load_layer_trace(path: str | Path, **kwargs) -> TraceSession:
+    with np.load(path) as z:
+        is_visual = z["is_visual"]
+        n_layers = int(z["n_layers"])
+        lengths = z["lengths"]
+        flat = z["weights"].astype(np.float32)
+    steps, i = [], 0
+    for ln in lengths:
+        steps.append(flat[i : i + n_layers * ln].reshape(n_layers, ln))
+        i += n_layers * ln
+    return trace_from_layer_attention(is_visual, steps, **kwargs)

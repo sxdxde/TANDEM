@@ -38,6 +38,9 @@ class StepMetrics:
     # that was served from WARM (0..1, since weights sum to 1 per step).
     quality_loss: float = 0.0
     warm_attention_mass: float = 0.0
+    # Milestone 6 sparse access: attention mass on entries not read this
+    # step (0 for dense access). Independent of tier placement.
+    skipped_attention_mass: float = 0.0
 
 
 @dataclass
@@ -75,6 +78,10 @@ class SessionMetrics:
     def mean_quality_loss(self) -> float:
         """Mean per-step attention-weighted quantization error."""
         return sum(s.quality_loss for s in self.steps) / len(self.steps) if self.steps else 0.0
+
+    @property
+    def mean_skipped_attention_mass(self) -> float:
+        return sum(s.skipped_attention_mass for s in self.steps) / len(self.steps) if self.steps else 0.0
 
     @property
     def mean_warm_attention_mass(self) -> float:
@@ -117,6 +124,7 @@ class SessionMetrics:
             "n_demotions": self.total_demotions,
             "mean_quality_loss": self.mean_quality_loss,
             "warm_attention_mass_pct": 100 * self.mean_warm_attention_mass,
+            "skipped_attention_mass_pct": 100 * self.mean_skipped_attention_mass,
             "final_hot_footprint_bytes": footprint[Tier.HOT],
             "final_warm_footprint_bytes": footprint[Tier.WARM],
         }
@@ -144,6 +152,7 @@ class SessionMetrics:
                     "n_demotions": s.n_demotions,
                     "quality_loss": s.quality_loss,
                     "warm_attention_mass": s.warm_attention_mass,
+                    "skipped_attention_mass": s.skipped_attention_mass,
                 }
             )
         return pd.DataFrame(rows)

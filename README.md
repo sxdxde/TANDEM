@@ -105,8 +105,14 @@ section of `NOTES.md`). Run `experiments/make_plots.py` and
 Visual tokens receive only ~6% of attention (vs 68% of mass served from WARM
 in the synthetic trace), so `static_modality` is already near the quality
 floor and the dynamic policy's benefit is marginal and failed a held-out
-check. See `NOTES.md` for the full analysis and caveats (3 traces, 1 model,
-layer-averaged attention).
+check. See `NOTES.md` for the full analysis and caveats (3 traces, 1 model).
+
+**Milestone 6** (per-layer entries, sparse-attention cost model, measured INT4
+error) is implemented (`experiments/run_m6.py`). With one entry per
+(token, layer) and dense reads, the dynamic policy saves ~20% energy vs static
+at roughly neutral quality; with sparse reads that benefit disappears. Measured
+INT4 error is ~0.09, not the assumed 0.05 (ratios unaffected). Details and
+caveats in `NOTES.md`.
 
 ## Repository structure
 

@@ -38,3 +38,31 @@ def test_roundtrip_and_simulates(tmp_path):
     s = load_trace(tmp_path / "t.npz")
     assert len(s.steps) == len(steps)
     assert len(run_session(s, FlatPolicy()).steps) == len(steps)
+
+
+def _layer_inputs(n_prefill=5, n_steps=3, n_layers=4, seed=0):
+    rng = np.random.default_rng(seed)
+    is_visual = np.array([False] + [True] * (n_prefill - 1))
+    return is_visual, [rng.random((n_layers, n_prefill + t + 1)) for t in range(n_steps)]
+
+
+def test_layer_trace_structure_and_mass():
+    from kvtier.real_trace import trace_from_layer_attention
+
+    is_visual, steps = _layer_inputs()
+    s = trace_from_layer_attention(is_visual, steps)
+    n_layers = 4
+    assert len(s.entries) == (len(is_visual) + len(steps)) * n_layers
+    for t, st in enumerate(s.steps):
+        assert len(st.new_positions) == n_layers
+        assert sum(st.attention_weights.values()) == pytest.approx(1.0)
+        assert len(st.attention_weights) == (len(is_visual) + t + 1) * n_layers
+
+
+def test_layer_trace_simulates_and_stride_reduces_layers():
+    from kvtier.real_trace import trace_from_layer_attention
+
+    is_visual, steps = _layer_inputs(n_layers=6)
+    s = trace_from_layer_attention(is_visual, steps, layer_stride=2)
+    assert len(s.steps[0].new_positions) == 3
+    assert len(run_session(s, FlatPolicy()).steps) == len(steps)

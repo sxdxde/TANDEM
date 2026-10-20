@@ -200,17 +200,81 @@ layers 0-1 and 11, 40-78% in layers 12-30. So the single-entry-per-token abstrac
 averaged weight per token) is a real modelling limitation: real KV caches are per-layer/head,
 and per-layer placement could have more to gain than this averaged view shows.
 
+## M6: per-layer entries, sparse-attention cost model, measured INT4 error
+Code: `DecodeStep.extra_new_positions` (multi-entry steps), `SparseAccess` in
+`simulator.py`, `trace_from_layer_attention` / `load_layer_trace` in `real_trace.py`,
+`experiments/extract_vlm_layer_trace.py` (head-averaged per-layer attention, `traces/*_layers.npz`),
+`experiments/run_m6.py`, `experiments/measure_int4_error.py`. 55 tests pass.
+
+**Sparse access model.** Each step reads only the top-10% of active entries by live importance
+EMA plus entries created in the last step; step 0 is dense; skipped attention mass is reported
+and costs no energy. Assumption: the importance estimate sees true weights at zero cost (an
+upper bound on a real approximate scorer). Skipped mass is placement-independent (tested).
+**Per-layer entries.** One entry per (token, layer); each layer's attention renormalised and
+divided by n_layers so mass per step is 1. Entry size matches single-entry tokens, so absolute
+energies are ~30x the layer-averaged ones: compare ratios only. Because quality is linear in
+attention weights, *static* policies give identical quality in both views (0.0031 on chart);
+per-layer entries only matter for what the dynamic policy can do.
+
+**Measured INT4 error** (`results/int4_error.csv`, SmolVLM prefill KV, per-token min-max INT4):
+relative L2 error K 0.102 / V 0.081 at group size 32; K 0.134 / V 0.094 at group 64; K per-channel
+variant not computed (guard skipped it for non-multiple-of-64 token counts). Visual vs text tokens
+identical within ~1%; across layers 0.086-0.096. **The assumed 0.05 was ~2x too low** (measured
+~0.09 at g32). Not changed in `default.yaml`: quality loss is linear in the error, so every
+quality ratio vs static is unchanged and only absolute quality values scale (x~1.8); kept at
+0.05 so committed results stay reproducible. Any absolute quality number should be read x~1.8.
+
+Protocol (same as M5, fixed in advance): thresholds in multiples of uniform attention; choose on
+chart+scene = lowest energy with mean quality <= static; test on held-out noise_label.
+Results (`results/m6_results.csv`, 408 simulations, `results/m6_sweep.csv`):
+
+| mode | flat/static energy | skipped mass | chosen thresholds | held-out energy vs static | held-out quality vs static |
+|---|---|---|---|---|---|
+| avg, dense (=M5) | 9.3x | 0% | 2.0x / 0.4x | -14.4% | +11.9% |
+| avg, sparse10 | 1.6x | 3.2-3.6% | 8.0x / 0.02x | +0.2% (no moves) | 0% |
+| per-layer, dense | 9.3x | 0% | 4.0x / 0.4x | -20.0% | +0.8% |
+| per-layer, sparse10 | 1.9-2.0x | 2.1-2.3% | 8.0x / 0.2x | +3.7% | -0.2% |
+
+Per-trace per-layer dense: energy -20.6 / -19.4 / -20.0%, quality -2.0 / -10.3 / +0.8%
+(chart / scene / noise_label), with 1.2-1.4k tier moves per session.
+
+Observations:
+- **Sparse access shrinks the value of tiering a lot but not to zero**: flat/static energy falls
+  from ~9.3x to 1.6-2.0x at 10% top-k, with only 2-3.6% of attention mass skipped. Exploratory
+  (unsaved ad-hoc run, chart, layer-averaged): 50% top-k 5.4x, 20% 2.5x, 10% 1.6x, 5% 1.4x.
+- **Layer-averaged + sparse: the dynamic policy has nothing to do** (chosen thresholds never
+  trigger; 0-1 moves). The static modality prior is already as good as it gets.
+- **Per-layer + dense gives the first real-trace dynamic win**: ~-20% energy on all three traces,
+  quality roughly neutral. The held-out quality is +0.8%, so it technically misses the strict
+  "no worse than static" rule by a small margin (stated plainly rather than rounded away).
+- **Mechanism (arithmetic, not separately instrumented):** in the static per-layer baseline the
+  ~1.3k HOT text entries (44 tokens x 30 layers) cost ~170M of ~380M pJ; the dynamic policy saves
+  ~78M, about half of that. WARM-mass share barely moves (6.2 -> 6.1%). So the saving comes from
+  demoting text entries in layers where text is unimportant (the per-layer view exposes
+  this), with a few promotions of visual entries in layers that attend them; it is NOT mainly
+  from rescuing salient visual tokens. This is the same text-demotion channel seen on the
+  synthetic trace.
+- **Under per-layer + sparse the benefit disappears or reverses** (+3.7..+7.5% energy, quality
+  -0.2..-7.8%): with sparse reads, HOT text entries are rarely read, so demoting them saves
+  little while ~1k moves still pay reconfiguration cost.
+- Overall: the dynamic policy's value on real traces is conditional on dense attention reads and
+  per-layer granularity, small (about -20% on top of static's ~-90% vs flat), and needs ~1k
+  tier moves per session; with sparse reads it is not worth it at the default 10x reconfig cost.
+  Caveats unchanged: 3 images, one 256M model, one held-out trace, selection on 2 traces.
+
 ## Open questions / caveats
 - Synthetic M4 conclusions did not replicate on real traces (see M5); treat the M4
   quality-vs-energy numbers as a property of the synthetic trace, not of VLMs.
 - Real-trace evidence is thin: 1 model (256M), 3 synthetic images, 64 decode steps, n=3
   traces, a single held-out trace. Natural photos/documents and larger models untested.
-- WARM quant error 0.05 is an assumption; the energy/quality trade-off scales with it.
+- WARM quant error 0.05 in the config is below the measured ~0.09 (M6); ratios vs static are
+  unaffected, absolute quality values are ~1.8x too small.
 - Latency is a serialized total-work figure (see `metrics.py`), not wall-clock.
-- Next candidates: per-layer (or per-head-group) entries instead of layer-averaged weights;
-  sparse-attention cost model (the simulator charges every entry every step, whereas real
-  systems skip low-attention tokens, which is the bigger lever); measure the INT4 error
-  instead of assuming 0.05; natural images / larger VLM.
+- Next candidates (per-layer, sparse model and INT4 measurement done in M6): per-head entries;
+  natural images / documents and a larger VLM; sweep reconfig cost and top-k fraction on real
+  traces; a layer-aware static prior (modality x layer) as a stronger baseline than
+  static_modality, since the per-layer dynamic win looks like it comes from a layer effect;
+  a real approximate importance estimator for sparse access; oracle top-k comparison (M5 plan).
 - No quality-aware policy yet. The policy never sees quality; a promotion rule that
   targets attention-weighted loss directly, or a warmup / recency-damping fix for the
   boundary churn, is the natural next step.
@@ -220,6 +284,7 @@ and per-layer placement could have more to gain than this averaged view shows.
 ## Artifacts
 - `results/sensitivity_sweep.csv`, `results/sensitivity_references.csv`
 - `results/milestone4_comparison.csv`, `comparison_bars.png`, `tier_timeline.png`
+- `results/m6_results.csv`, `m6_sweep.csv`, `int4_error.csv`, `traces/*_layers.npz`
 - `traces/{chart,scene,noise_label}.npz`, `results/real_trace_results.csv`, `results/real_trace_sweep.csv`
 - `results/damping_sweep.csv`
 - `results/sensitivity_pareto.png`, `sensitivity_reconfig_cost.png`, `sensitivity_thresholds.png`

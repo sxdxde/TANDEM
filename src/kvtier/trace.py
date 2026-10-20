@@ -48,6 +48,14 @@ class DecodeStep:
     step: int
     new_entry_position: int
     attention_weights: dict[int, float]  # position -> weight, sums to 1.0
+    # Milestone 6: per-layer traces create one new entry per layer each step.
+    # ``new_entry_position`` is the first; any others are listed here (in
+    # session.entries order). Empty for the single-entry-per-step traces.
+    extra_new_positions: list[int] = field(default_factory=list)
+
+    @property
+    def new_positions(self) -> list[int]:
+        return [self.new_entry_position, *self.extra_new_positions]
 
 
 @dataclass

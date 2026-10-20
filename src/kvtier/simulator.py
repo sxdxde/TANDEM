@@ -24,6 +24,9 @@ purely as where entries are created and initially placed.
 
 from __future__ import annotations
 
+import heapq
+from dataclasses import dataclass
+
 import simpy
 
 from kvtier.kv_entry import Tier, TokenKV
@@ -37,6 +40,28 @@ from kvtier.trace import TraceSession
 DEFAULT_EMA_DECAY: float = 0.9
 
 
+@dataclass(frozen=True)
+class SparseAccess:
+    """Sparse-attention cost model (Milestone 6).
+
+    Instead of reading every active entry each step, read only the
+    ``top_k_fraction`` of active entries with the highest *live* importance
+    EMA, plus every entry created in the last ``recent_steps`` steps (new
+    tokens have no history yet). The first step has no importance signal, so
+    it is read densely. Skipped entries cost nothing; their attention mass is
+    reported as ``skipped_attention_mass``.
+
+    Assumption: the importance estimate used for selection sees every
+    entry's true attention weight each step (an oracle-quality, zero-cost
+    estimator), as an upper bound on what a real approximate scorer gives.
+    Selection depends only on the shared importance signal, not on tiers, so
+    skipped mass is identical across placement policies.
+    """
+
+    top_k_fraction: float = 0.1
+    recent_steps: int = 1
+
+
 def run_session(
     session: TraceSession,
     policy: PlacementPolicy,
@@ -44,6 +69,7 @@ def run_session(
     reconfig_manager: ReconfigurationManager | None = None,
     ema_decay: float = DEFAULT_EMA_DECAY,
     bias_correct_ema: bool = False,
+    sparse: SparseAccess | None = None,
 ) -> SessionMetrics:
     """Simulate one trace session under ``policy``, returning aggregated metrics."""
     tiers = tiers if tiers is not None else {t: get_tier(t) for t in Tier}
@@ -54,9 +80,11 @@ def run_session(
 
     monitor.reset(session.entries)
 
-    n_prefill = len(session.entries) - len(session.steps)
+    n_new = sum(len(st.new_positions) for st in session.steps)
+    n_prefill = len(session.entries) - n_new
     prefill_entries = session.entries[:n_prefill]
     decode_entries = session.entries[n_prefill:]
+    recent_positions: list[list[int]] = []  # new positions of each past step
 
     active: dict[int, TokenKV] = {}
     for entry in prefill_entries:
@@ -64,11 +92,16 @@ def run_session(
         active[entry.position] = entry
 
     def process():
-        for step, new_entry in zip(session.steps, decode_entries):
-            assert new_entry.position == step.new_entry_position
-
-            new_entry.tier = policy.initial_tier(new_entry)
-            active[new_entry.position] = new_entry
+        cursor = 0
+        for step in session.steps:
+            positions = step.new_positions
+            for pos in positions:
+                new_entry = decode_entries[cursor]
+                cursor += 1
+                assert new_entry.position == pos
+                new_entry.tier = policy.initial_tier(new_entry)
+                active[pos] = new_entry
+            recent_positions.append(positions)
 
             step_latency = 0.0
             step_energy = 0.0
@@ -77,8 +110,21 @@ def run_session(
             tier_access_counts = {t: 0 for t in Tier}
             quality_loss = 0.0
             warm_mass = 0.0
+            skipped_mass = 0.0
+
+            read: set[int] | None = None
+            if sparse is not None and step.step > 0:
+                k = max(1, round(sparse.top_k_fraction * len(active)))
+                read = set(
+                    heapq.nlargest(k, active, key=lambda p: active[p].importance)
+                )
+                for ps in recent_positions[-sparse.recent_steps:]:
+                    read.update(ps)
 
             for pos, weight in step.attention_weights.items():
+                if read is not None and pos not in read:
+                    skipped_mass += weight
+                    continue
                 entry = active[pos]
                 quality_loss += weight * tiers[entry.tier].quant_error
                 if entry.tier == Tier.WARM:
@@ -135,6 +181,7 @@ def run_session(
                     n_demotions=n_demotions,
                     quality_loss=quality_loss,
                     warm_attention_mass=warm_mass,
+                    skipped_attention_mass=skipped_mass,
                 )
             )
 
