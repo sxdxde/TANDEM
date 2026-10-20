@@ -285,7 +285,7 @@ Observations (means over the three held-out folds, vs static_modality):
 - **Hypothesis falsified.** At matched energy (~-20%) the static role x layer profile has about
   +16..+26% *worse* quality than static_modality, while the dynamic policy gets -19.8% energy at
   -3.0% quality (dense, CV, ~1.2k tier moves). The profile's in-sample ceiling equals its
-  cross-validated result (-27.2% vs -27.5% etc., same selected groups), so this is not
+  cross-validated result (at the selected theta 0.2: +27.2% energy / -18.4% quality in-sample vs +27.7% / -18.6% CV; same selected groups), so this is not
   under-fitting or leakage: the profile transfers across these images, but layer- and
   role-level information is simply too coarse.
 - **Correction to the M6 mechanism note.** I wrote that the saving came from "demoting text

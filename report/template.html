@@ -180,7 +180,7 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
     <span>Updated 2026-10-20</span>
     <span>Simulator: SimPy</span>
     <span>Real traces: SmolVLM-256M-Instruct</span>
-    <span id="metaCommit">Repo HEAD 31e94c4</span>
+    <span id="metaCommit">Repo HEAD c8715eb</span>
   </div>
   <ul class="toc">
     <li><a href="#abstract">Abstract</a></li>
@@ -189,6 +189,7 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
     <li><a href="#method">Method and findings</a></li>
     <li><a href="#evidence">Evidence</a></li>
     <li><a href="#m6">M6</a></li>
+    <li><a href="#m6b">M6b</a></li>
     <li><a href="#decisions">Decision log</a></li>
     <li><a href="#limits">Limits and next steps</a></li>
     <li><a href="#conclusion">Conclusion</a></li>
@@ -200,14 +201,14 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
   <h2 style="border-top:0;margin-top:40px;padding-top:0">1 · Abstract</h2>
   <div class="prose">
     <p>KV-Tier simulates a two-tier KV cache for vision-language model decoding. The HOT tier holds entries in FP16 on conventional DRAM or HBM. The WARM tier is a compute-in-memory tier that holds entries in INT4: about ten times cheaper per byte in energy, about one and a half times slower, and lossy. We built a SimPy simulator, a synthetic attention trace, and a dynamic policy that moves entries between tiers from a live importance estimate. Every move is charged.</p>
-    <p>On the synthetic trace the dynamic policy buys about 49% less quality loss for about 55% more energy than a fixed split by modality. On real attention traces from SmolVLM-256M that trade-off does not appear. Visual tokens receive about 6% of attention, the fixed split is already near the quality floor, and thresholds picked on two traces failed the no-worse-quality check on a third. A sixth round (M6) tested per-layer entries and sparse reads. Per-layer entries with dense reads give the first real-trace dynamic win, about 20% less energy at roughly neutral quality, with a marginal +0.8% held-out quality miss of the strict rule. With sparse reads the win disappears. M6 also measured the INT4 error at about 0.09, against the 0.05 we assumed. That scales absolute quality values by about 1.8× and leaves every ratio unchanged. This page records each step, including the dead ends and one post-hoc choice.</p>
+    <p>On the synthetic trace the dynamic policy buys about 49% less quality loss for about 55% more energy than a fixed split by modality. On real attention traces from SmolVLM-256M that trade-off does not appear. Visual tokens receive about 6% of attention, the fixed split is already near the quality floor, and thresholds picked on two traces failed the no-worse-quality check on a third. Two further rounds tested per-layer entries and sparse reads (M6) and a layer-aware static baseline (M6b). With per-layer entries and dense reads the dynamic policy saves about 20% energy at roughly neutral quality (−19.8% energy, −3.0% quality, cross-validated). M6b falsified the hypothesis that this is a layer effect: a static layer or role profile at matched energy loses 16% to 26% on quality, so the edge comes from per-entry information. With sparse reads the edge vanishes. M6 also measured the INT4 error at about 0.09, against the 0.05 we assumed, which scales absolute quality values by about 1.8× and leaves every ratio unchanged. This page records each step, including the dead ends and one post-hoc choice.</p>
   </div>
   <div class="glance">
     <div><b>−88%</b><span>energy of static modality split vs all-HOT, for +34% latency (M2)</span></div>
     <div><b>+55% / −49%</b><span>energy / quality loss of dynamic vs static, synthetic trace, 10× move cost</span></div>
     <div><b>6%</b><span>of attention mass lands on visual tokens in real traces, which are 95% of entries</span></div>
     <div><b>+11.9%</b><span>quality loss vs static on the held-out real trace (criterion: no worse). Failed (M5).</span></div>
-    <div><b>−20%</b><span>energy vs static with per-layer entries and dense reads; held-out quality +0.8%, a marginal miss (M6)</span></div>
+    <div><b>−19.8%</b><span>energy vs static with per-layer entries and dense reads, at −3.0% quality. A static layer or role profile cannot match it (M6b)</span></div>
   </div>
 
   <h3>Motivation</h3>
@@ -467,7 +468,20 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
         <li>With sparse reads the win disappears (+3.7% to +7.5% energy). With layer-averaged entries and sparse reads the policy never moves anything.</li>
         <li>Sparse reads cut the flat-over-static energy ratio from about 9.3× to 1.6× to 2.0×, so tiering is worth much less when a system skips low-attention tokens.</li>
         <li>Measured INT4 error is about 0.09, against 0.05 assumed. Ratios are unaffected; absolute quality values scale by about 1.8×.</li>
-        <li>The likely mechanism is demotion of text entries in layers that ignore them. This is an inference from totals, not an instrumented result.</li>
+        <li>We first attributed the saving to demoting text entries in layers that ignore them. M6b retracted the layer part of that explanation.</li>
+      </ul>
+    </article>
+
+    <article class="step neg">
+      <div class="step-head"><span class="eyebrow">M6b</span><span class="badge neg">▼ hypothesis falsified</span></div>
+      <h3>Layer-aware static baseline</h3>
+      <ul>
+        <li>Hypothesis: the per-layer dynamic win is a layer effect, so a static (modality × layer) or (role × layer) profile built offline should match it with zero moves.</li>
+        <li>Leave-one-trace-out cross-validation, an in-sample ceiling, two groupings, eight θ values, dense and sparse reads. Protocol fixed in advance.</li>
+        <li>At matched energy of about −20% the static role × layer profile has 16% to 26% worse quality than static modality, while dynamic reaches −19.8% energy at −3.0% quality.</li>
+        <li>(modality, layer) is degenerate: for θ of 0.4 or higher it is exactly static modality.</li>
+        <li>The in-sample ceiling is close to the cross-validated result, so this is not under-fitting or leakage.</li>
+        <li>The earlier mechanism claim was partly wrong. The saving comes from per-token variation among text entries, not from layers where text is unimportant.</li>
       </ul>
     </article>
   </div>
@@ -483,6 +497,9 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
     <li><span class="badge neg">▼</span><span>With sparse reads the per-layer dynamic win disappears or reverses, and layer-averaged entries leave the policy nothing to do.</span></li>
     <li><span class="badge neu">●</span><span>The per-layer dense result misses the strict no-worse-quality rule by +0.8% on the held-out trace.</span></li>
     <li><span class="badge neu">●</span><span>The mechanism behind the per-layer gain is inferred from totals, not instrumented.</span></li>
+    <li><span class="badge neg">▼</span><span>The M6b hypothesis that the per-layer dynamic win is a layer effect was falsified. A static layer or role profile loses 16% to 26% on quality at matched energy.</span></li>
+    <li><span class="badge neg">▼</span><span>Our M6 mechanism claim, demotion of text entries in layers where text is unimportant, was partly wrong. The layer part is retracted.</span></li>
+    <li><span class="badge neu">●</span><span>The (modality, layer) grouping is degenerate: for θ of 0.4 or higher it equals static modality.</span></li>
     <li><span class="badge neg">▼</span><span>The assumed INT4 error was about half the measured value. Ratios survive, absolute quality numbers do not.</span></li>
     <li><span class="badge neu">●</span><span>One process slip: a test with a missing import was committed, then fixed in the next commit (748ec98).</span></li>
   </ul>
@@ -636,7 +653,7 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
   <div class="flag" style="max-width:78ch"><b>Strict rule, marginal miss.</b> On the held-out trace the per-layer dense configuration saves 20.0% energy and loses 0.8% on quality against static. The rule fixed in advance was quality no worse than static, so this misses by 0.8%. We report it as a miss and do not round it to zero. Quality was −2.0% and −10.3% on the two training traces.</div>
 
   <div class="pending" style="border-style:solid">
-    <p style="margin:0"><b>Mechanism: arithmetic inference, not instrumented.</b> In the static per-layer baseline the roughly 1.3k HOT text entries (44 tokens × 30 layers) cost about 170M of about 380M pJ. The dynamic policy saves about 78M pJ, roughly half of that. The WARM share of attention barely moves (6.2% to 6.1%). From these totals, the saving comes mostly from demoting text entries in layers where text is unimportant, plus a few promotions of visual entries in layers that attend to them. It does not come mainly from rescuing salient visual tokens. This is the same text-demotion channel seen on the synthetic trace. We did not break the saving down per entry to confirm it.</p>
+    <p style="margin:0"><b>Mechanism: arithmetic inference, partly retracted in M6b.</b> In the static per-layer baseline the roughly 1.3k HOT text entries (44 tokens × 30 layers) cost about 170M of about 380M pJ, which is about 45%. The dynamic policy saves about 78M pJ, roughly half of that. The WARM share of attention barely moves (6.2% to 6.1%). We first read this as demotion of text entries in layers where text is unimportant, plus a few visual promotions. <b>The layer part of that reading is retracted:</b> M6b found no text layer group that is unimportant on average. The saving comes from variation among individual text entries, which only a per-entry online signal sees (section 7). This is an inference from totals. We did not instrument the saving per entry.</p>
   </div>
 
   <h3>Measured INT4 error</h3>
@@ -653,8 +670,52 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
   </figure>
 </section>
 
+<section id="m6b">
+  <h2>7 · M6b: is the per-layer win just a layer effect?</h2>
+  <div class="prose">
+    <p><b>Hypothesis, stated before the test.</b> After M6 the working explanation was that the per-layer dynamic win is a layer effect. If so, a static profile built offline from group importance, by modality and layer, should capture it with zero tier moves.</p>
+    <p><b>Result: the hypothesis was falsified.</b> A static layer or role profile at matched energy has clearly worse quality than the dynamic policy. The explanation we gave for the M6 saving was partly wrong, and the layer part of it is retracted below.</p>
+  </div>
+
+  <h3>Method</h3>
+  <div class="prose">
+    <ul>
+      <li><b>Profile.</b> <code>kvtier/profile.py</code> computes the mean per-entry importance of each group. A static policy then puts every group at or above a threshold θ (in multiples of uniform attention) in HOT and the rest in WARM. No entry ever moves.</li>
+      <li><b>Two groupings.</b> (modality, layer), and (role, layer) where role is one of sink, prompt text, generated, visual.</li>
+      <li><b>Protocol, fixed in advance.</b> Leave-one-trace-out cross-validation: the profile and θ come from the other two traces and are scored on the held-out one. The selection rule is the earlier one (lowest energy with quality no worse than static). We also report an in-sample ceiling, where the profile is built on the trace it is scored on.</li>
+      <li><b>Grid.</b> Eight θ values from 0.05 to 4.0, on both dense and sparse-10% reads. Numbers below are means over the three held-out folds, against static modality.</li>
+    </ul>
+  </div>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 17 · Static layer profiles against the dynamic policy</div>
+    <div class="legend" id="lg-la"></div>
+    <div class="seg" role="group" aria-label="Read mode" id="la-seg"></div>
+    <div id="f-la"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-la"></div></details>
+    <figcaption id="cap-la"></figcaption>
+  </figure>
+
+  <h3>What the curve shows</h3>
+  <div class="prose">
+    <ul>
+      <li><b>The static role × layer profile traces a trade-off curve</b> and never reaches the dynamic point. On dense reads: θ 0.4 gives −5.3% energy at +5.0% quality loss, θ 0.7 gives −17% at +16%, θ 1.0 gives −23% at +26%, θ 2.0 gives −26% at +30%, θ 4.0 gives −27% at +41%. At matched energy of about −20%, the static profile loses roughly 16% to 26% on quality. The dynamic policy gets −19.8% energy at −3.0% quality, with about 1.2k tier moves per session.</li>
+      <li><b>(modality, layer) is degenerate.</b> For every θ of 0.4 or higher it selects exactly the 30 text groups, which is static modality (0.00% energy, 0.00% quality). Text entries are few and include the sink and recent tokens, so every text group has a mean per-entry importance of at least 4× uniform. Only θ of 0.2 or lower changes anything: it adds the layer-0 visual group, for +27.7% energy and −18.6% quality loss on dense reads (+23.8% and −19.2% on sparse). The cheap, stable end of the profile is just "also keep layer-0 visual in HOT".</li>
+      <li><b>This is not under-fitting or leakage.</b> At the θ chosen by the selection rule, the in-sample ceiling (+27.2% energy, −18.4% quality) is almost the same as the cross-validated result (+27.7%, −18.6%), with the same groups selected. The profile transfers across these images. Layer and role information is too coarse.</li>
+      <li><b>The selection rule was uninformative here.</b> "Quality no worse than static" picks θ = 0.2, a costlier operating point than dynamic. That is why the comparison is made at matched energy along the curve.</li>
+      <li><b>Under sparse reads dynamic still does not pay</b> (+5.9% energy, −3.7% quality). The static role × layer curve is a different operating point: from −2.6% energy at +7.1% quality loss down to −16.8% energy at +57.9%.</li>
+    </ul>
+  </div>
+
+  <div class="flag" style="max-width:78ch"><b>Correction to the M6 mechanism note.</b> M6 said the saving came from "demoting text entries in layers where text is unimportant". The energy arithmetic stands: text entries are about 45% of static energy, and the saving is about half of that. The layer part is wrong. No text layer group is unimportant on average. The saving comes from variation among individual text entries, meaning which prompt tokens matter in this prompt. Only a per-entry, online signal sees that. We have not instrumented the saving per entry, so this is still inference from the group statistics and the totals.</div>
+
+  <div class="prose">
+    <p><b>Net effect on the conclusion.</b> On real traces with dense reads, the dynamic policy's edge is real, and it comes from per-entry information. It is not a proxy for a layer or role prior. Under sparse reads the edge vanishes. Caveats as before: three images, one small model, a coarse θ grid of eight values, and only two static groupings as comparators.</p>
+  </div>
+</section>
+
 <section id="decisions">
-  <h2>7 · Decision log</h2>
+  <h2>8 · Decision log</h2>
   <div class="prose"><p>The user told us to automate every decision, so most entries are Claude's. The one decision the user made directly is marked.</p></div>
   <div class="tbl wide"><table>
     <thead><tr><th>Decision</th><th>Why</th><th>Evidence</th><th>By</th></tr></thead>
@@ -679,13 +740,18 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
       <tr><td>Reuse the M5 selection protocol for M6</td><td>Keeps results comparable and avoids new degrees of freedom</td><td>Same train and test traces and rule</td><td>Claude</td></tr>
       <tr><td>Keep quant error at 0.05 in the config despite measuring 0.09</td><td>Ratios are unaffected and committed results stay reproducible</td><td>Quality is linear in the error; read absolute values × about 1.8</td><td>Claude</td></tr>
       <tr><td>Report the +0.8% held-out quality as a marginal miss</td><td>The rule was quality no worse than static</td><td><code>results/m6_results.csv</code></td><td>Claude</td></tr>
-      <tr><td>Label the mechanism as inference</td><td>The 170M and 78M pJ figures are arithmetic from totals, not instrumented</td><td><code>NOTES.md</code>, M6 observations</td><td>Claude</td></tr>
+      <tr><td>Test the layer-effect hypothesis with a static layer-aware baseline (M6b)</td><td>If the per-layer win were a layer effect, a static profile would capture it with no moves</td><td>Static role × layer loses 16% to 26% on quality at matched energy (Figure 17)</td><td>Claude</td></tr>
+      <tr><td>Leave-one-trace-out cross-validation plus an in-sample ceiling for M6b</td><td>Separates leakage and under-fitting from a real limit of the profile</td><td>Ceiling +27.2% / −18.4% against CV +27.7% / −18.6%, same groups</td><td>Claude</td></tr>
+      <tr><td>Two groupings, (modality, layer) and (role, layer)</td><td>Role splits text into sink, prompt and generated, which modality alone cannot</td><td>(modality, layer) is degenerate for θ ≥ 0.4; (role, layer) gives the curve</td><td>Claude</td></tr>
+      <tr><td>Compare at matched energy along the θ curve</td><td>The selection rule picks θ = 0.2, a costlier point than dynamic, so it does not compare like with like</td><td><code>results/layer_aware_theta_curve.csv</code></td><td>Claude</td></tr>
+      <tr><td>Retract the layer part of the M6 mechanism note</td><td>M6b found no text layer group that is unimportant on average</td><td><code>NOTES.md</code>, M6b correction</td><td>Claude</td></tr>
+      <tr><td>Label the mechanism as inference</td><td>The 170M and 78M pJ figures are arithmetic from totals, not instrumented. Still true after M6b</td><td><code>NOTES.md</code>, M6 observations</td><td>Claude</td></tr>
     </tbody>
   </table></div>
 </section>
 
 <section id="limits">
-  <h2>8 · Limits and next steps</h2>
+  <h2>9 · Limits and next steps</h2>
   <h3>Limits</h3>
   <div class="prose">
     <ul>
@@ -696,7 +762,8 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
       <li>Per-layer entries average over heads within a layer. Per-head structure is still hidden.</li>
       <li>Sparse reads assume a perfect importance estimate at zero cost, which is an upper bound for any real scorer. The 50%, 20% and 5% top-k numbers come from an unsaved ad-hoc run.</li>
       <li>The per-layer dense gain needs about a thousand tier moves per session, and it narrowly misses the strict quality rule.</li>
-      <li>The mechanism behind the per-layer gain is inferred from totals, not instrumented.</li>
+      <li>The mechanism behind the per-layer gain is inferred from group statistics and totals. M6b rules out a layer or role prior, but the per-token explanation is not instrumented.</li>
+      <li>M6b used a coarse grid of eight θ values and only two static groupings as comparators. A finer or different static profile could narrow the gap.</li>
       <li>No quality-aware policy exists yet. The policy never sees quality.</li>
       <li>The planned oracle comparison against ground-truth top-k attended tokens is not done.</li>
     </ul>
@@ -704,7 +771,9 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
   <h3>Next steps</h3>
   <div class="prose">
     <ul>
-      <li>A layer-aware static prior (modality × layer) as a stronger baseline than static modality. The per-layer dynamic win looks like a layer effect, so this baseline may capture it without any moves.</li>
+      <li>Find the cheapest sufficient signal. Ablate the dynamic policy's per-entry information (for example a per-token score from the prompt) against the layer and role profiles M6b already ruled out. This is our suggestion; it has not been run.</li>
+      <li>Instrument the dynamic saving per entry, to confirm that it comes from individual text tokens.</li>
+      <li>A finer θ grid and further static groupings for the M6b comparison.</li>
       <li>Per-head entries.</li>
       <li>A real approximate importance estimator for sparse reads, in place of true weights.</li>
       <li>Sweep move cost and top-k fraction on real traces.</li>
@@ -715,11 +784,11 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
 </section>
 
 <section id="conclusion">
-  <h2>9 · Conclusion</h2>
+  <h2>10 · Conclusion</h2>
   <div class="prose">
     <p>A fixed split by modality does most of the work. On real traces it cuts energy by about 90% against keeping everything HOT, for a quality loss near 0.003, and sparse reads shrink the remaining gap between flat and static from about 9.3× to under 2×.</p>
-    <p>The dynamic policy's synthetic trade-off (about −49% quality loss for about +55% energy) did not replicate. The synthetic trace sent about 68% of attention to WARM, and real traces send about 6%. On real traces its value is conditional. With per-layer entries and dense reads it saves about 20% energy at roughly neutral quality, narrowly missing the strict rule, and likely by demoting text entries rather than rescuing visual ones. With sparse reads that benefit vanishes, and it needs about a thousand moves per session.</p>
-    <p>The INT4 error we assumed was about half the measured value. That does not change any ratio. The next experiment worth running is a layer-aware static prior, since it would show whether the dynamic policy's remaining gain needs dynamics at all.</p>
+    <p>The dynamic policy's synthetic trade-off (about −49% quality loss for about +55% energy) did not replicate. The synthetic trace sent about 68% of attention to WARM, and real traces send about 6%. On real traces its value is conditional. With per-layer entries and dense reads it saves about 20% energy at roughly neutral quality (−19.8% energy, −3.0% quality across three held-out folds). The held-out noise_label trace alone misses the strict quality rule by 0.8%. M6b tested whether that saving is a layer effect and found it is not: a static layer or role profile at matched energy loses 16% to 26% on quality. The edge is real, it comes from per-entry information, and we believe it comes from variation among text entries, though we have not instrumented that. With sparse reads the edge vanishes, and it needs about a thousand moves per session.</p>
+    <p>The INT4 error we assumed was about half the measured value. That does not change any ratio. M6b also tested a layer-aware static prior as a way to get the saving without moves, and it did not close the gap. The next experiment worth running is an ablation of the per-entry signal, to find the cheapest information that still captures the saving.</p>
   </div>
 </section>
 </main>
@@ -727,7 +796,7 @@ footer ul { padding-left: 18px; margin: 8px 0 0; }
 <footer>
   <div class="eyebrow">Provenance</div>
   <ul>
-    <li>Narrative and numbers: <code>NOTES.md</code>. Chart data: <code>results/milestone4_comparison.csv</code>, <code>sensitivity_references.csv</code>, <code>sensitivity_sweep.csv</code>, <code>damping_sweep.csv</code>, <code>dynamic_hybrid_timeseries.csv</code>, <code>real_trace_results.csv</code>, <code>m6_results.csv</code>, <code>int4_error.csv</code>. The M6 tables are from <code>NOTES.md</code>.</li>
+    <li>Narrative and numbers: <code>NOTES.md</code>. Chart data: <code>results/milestone4_comparison.csv</code>, <code>sensitivity_references.csv</code>, <code>sensitivity_sweep.csv</code>, <code>damping_sweep.csv</code>, <code>dynamic_hybrid_timeseries.csv</code>, <code>real_trace_results.csv</code>, <code>m6_results.csv</code>, <code>int4_error.csv</code>, <code>layer_aware_results.csv</code>, <code>layer_aware_theta_curve.csv</code>. The M6 tables are from <code>NOTES.md</code>.</li>
     <li>Per-layer values in Figure 12 come from a one-off analysis run in the working session (chart trace, 16 decode steps). <code>NOTES.md</code> summarizes only their range.</li>
     <li>The page is generated by <code>report/build.py</code> from <code>report/template.html</code>.</li>
   </ul>
@@ -1314,5 +1383,66 @@ function divbars(host, w, rows, lo, hi, o) {
   });
   tableView(document.getElementById('tv-int4'), ['tensor', 'scheme', 'tokens', 'mean relative L2 error', 'rows'],
     D.int4.summary.map(r => [r.t, r.scheme === 'tok_g32' ? 'group 32' : 'group 64', r.who, r.err.toFixed(3), r.n]));
+})();
+
+/* ---------- M6b: Figure 17 ---------- */
+(function () {
+  const LA = D.la;
+  legend(document.getElementById('lg-la'), [
+    {label: 'static role × layer, one point per θ', c: 'var(--s1)'},
+    {label: 'static modality', c: 'var(--s2)'},
+    {label: 'dynamic (cross-validated)', c: 'var(--s3)'},
+    {label: 'static modality × layer, θ values', c: 'var(--fg2)', ring: true}
+  ]);
+  const seg = document.getElementById('la-seg'), host = document.getElementById('f-la'), cap = document.getElementById('cap-la');
+  let mode = 'layer_dense';
+  const MODELBL = {layer_dense: 'dense reads', layer_sparse10: 'sparse 10% reads'};
+  const DOM = {layer_dense: {x: [-35, 40], y: [-25, 50]}, layer_sparse10: {x: [-25, 35], y: [-25, 65]}};
+  const CAP = {
+    layer_dense: '<b>No static profile reaches the dynamic point.</b> Moving along the blue curve to match the dynamic energy of about −20% costs +16% to +26% quality loss, while the dynamic policy sits at −3.0%. Lower left is better. The (modality, layer) grouping collapses onto static modality for every θ of 0.4 or higher. Two points are off the chart: role × layer and modality × layer at θ 0.05 (+322.8% energy, −70.2% quality) and θ 0.1 (+175.4%, −50.4%). All points are means over three held-out folds.',
+    layer_sparse10: '<b>Under sparse reads the dynamic policy sits at +5.9% energy and −3.7% quality,</b> a different and costlier operating point than the static curve, which runs from −2.6% energy at +7.1% quality loss to −16.8% at +57.9%. Dynamic does not pay here. Two points are off the chart, for both groupings: θ 0.05 (+60.2% energy, −75.3% quality) and θ 0.1 (+44.5%, −53.6%). The table view lists every value.'
+  };
+  const draw = w => {
+    const dom = DOM[mode];
+    const roleCurve = LA.curve.filter(c => c.g === 'role_layer' && c.mode === mode);
+    const modCurve = LA.curve.filter(c => c.g === 'modality_layer' && c.mode === mode);
+    const inR = c => c.e >= dom.x[0] && c.e <= dom.x[1] && c.q >= dom.y[0] && c.q <= dom.y[1];
+    const fmtT = c => 'θ ' + c.theta;
+    const pts = [];
+    roleCurve.filter(inR).forEach(c => pts.push({x: c.e, y: c.q, fill: 'var(--s1)', r: 5, label: fmtT(c),
+      dx: 9, dy: -8, tip: `<b>static role × layer, ${fmtT(c)}</b><br>HOT groups: ${c.hot}<br>energy vs static: ${sgn(c.e)}<br>quality vs static: ${sgn(c.q)}`}));
+    modCurve.filter(c => c.theta <= 0.2 && inR(c)).forEach(c => pts.push({x: c.e, y: c.q, fill: 'var(--fg2)', r: 5, ring: true,
+      tip: `<b>static modality × layer, ${fmtT(c)}</b><br>HOT groups: ${c.hot}<br>energy vs static: ${sgn(c.e)}<br>quality vs static: ${sgn(c.q)}`}));
+    pts.push({x: 0, y: 0, fill: 'var(--s2)', r: 8, label: 'static modality', dx: 12, dy: 20,
+      tip: '<b>static modality</b><br>origin<br>modality × layer for every θ ≥ 0.4 lands here'});
+    const d = LA.dyn[mode];
+    pts.push({x: d.e, y: d.q, fill: 'var(--s3)', r: 8, label: 'dynamic', dx: -12, dy: -12, anchor: 'end',
+      tip: `<b>dynamic (cross-validated)</b><br>energy vs static: ${sgn(d.e)}<br>quality vs static: ${sgn(d.q)}<br>moves per session: about ${d.moves}`});
+    scatter(host, w, {h: 380, x: dom.x, y: dom.y, xticks: niceTicks(dom.x[0], dom.x[1], 6), yticks: niceTicks(dom.y[0], dom.y[1], 5),
+      xfmt: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%', yfmt: v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%',
+      xlabel: 'energy vs static modality (lower is better)', ylabel: 'quality loss vs static (lower is better)',
+      refs: [], points: pts, aria: `Static layer profiles against the dynamic policy, ${MODELBL[mode]}`});
+    // join the role x layer curve with a line, drawn under the points
+    const svg = host.querySelector('svg');
+    const ids = roleCurve.filter(inR);
+    if (svg && ids.length > 1) {
+      const m = {l: 58, r: 20, t: 16, b: 48}, iw = w - m.l - m.r, ih = 380 - m.t - m.b;
+      const X = v => m.l + (v - dom.x[0]) / (dom.x[1] - dom.x[0]) * iw, Y = v => m.t + ih - (v - dom.y[0]) / (dom.y[1] - dom.y[0]) * ih;
+      const line = el('polyline', {points: ids.map(c => `${X(c.e)},${Y(c.q)}`).join(' '), style: 'fill:none;stroke:var(--s1);stroke-width:1.5;opacity:.6'});
+      svg.insertBefore(line, svg.querySelector('circle'));
+    }
+    cap.innerHTML = '<b>Figure 17 · ' + MODELBL[mode] + '.</b> ' + CAP[mode];
+    const rows = LA.curve.filter(c => c.mode === mode).sort((a, b) => a.g.localeCompare(b.g) || a.theta - b.theta);
+    tableView(document.getElementById('tv-la'), ['grouping', 'θ', 'HOT groups', 'energy vs static', 'quality vs static'],
+      rows.map(c => [c.g === 'role_layer' ? 'role × layer' : 'modality × layer', c.theta, c.hot, sgn(c.e), sgn(c.q)]).concat(
+        [['dynamic (cross-validated)', '', '', sgn(d.e), sgn(d.q)]]));
+  };
+  ['layer_dense', 'layer_sparse10'].forEach(m => {
+    const b = html('button', {type: 'button', 'aria-pressed': m === mode ? 'true' : 'false'}, seg, MODELBL[m]);
+    b.addEventListener('click', () => { mode = m; seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false')); draw(Math.floor(host.clientWidth)); });
+  });
+  let last = 0;
+  new ResizeObserver(() => { const w = Math.floor(host.clientWidth); if (w > 0 && w !== last) { last = w; draw(w); } }).observe(host);
+  draw(Math.floor(host.clientWidth) || 640);
 })();
 </script>

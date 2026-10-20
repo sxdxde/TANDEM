@@ -72,7 +72,32 @@ int4 = dict(
     summary=[dict(t=k[0], scheme=k[1], who=k[2], err=round(st.mean(v), 4), n=len(v)) for k, v in sorted(_sum.items())],
 )
 
-data = dict(policies=policies, sweep=sweep, damping=damping, ts=ts, real=real, m6=m6, int4=int4)
+# M6b: layer-aware static baseline (means over the three leave-one-trace-out folds)
+_c = rows("layer_aware_theta_curve.csv")
+_agg = defaultdict(list)
+for r in _c:
+    _agg[(r["grouping"], r["mode"], fl(r["theta"]))].append(
+        (fl(r["energy_vs_static_pct"]), fl(r["quality_vs_static_pct"]), fl(r["n_hot_groups"])))
+curve = [dict(g=k[0], mode=k[1], theta=k[2], e=round(st.mean(x[0] for x in v), 2),
+              q=round(st.mean(x[1] for x in v), 2), hot=round(st.mean(x[2] for x in v), 1))
+         for k, v in sorted(_agg.items())]
+_la = rows("layer_aware_results.csv")
+_dyn = defaultdict(list)
+_pol = defaultdict(list)
+for r in _la:
+    if r["policy"] == "dynamic (CV)":
+        _dyn[r["mode"]].append((fl(r["energy_vs_static_pct"]), fl(r["quality_vs_static_pct"]), int(r["moves"])))
+    elif r["policy"].startswith(("modality_layer", "role_layer")):
+        _pol[(r["grouping"], r["mode"], r["policy"])].append(
+            (fl(r["energy_vs_static_pct"]), fl(r["quality_vs_static_pct"]), r["theta"]))
+dyn = {m: dict(e=round(st.mean(x[0] for x in v), 2), q=round(st.mean(x[1] for x in v), 2),
+               moves=round(st.mean(x[2] for x in v)), folds=[dict(e=round(x[0], 2), q=round(x[1], 2), moves=x[2]) for x in v])
+       for m, v in _dyn.items()}
+la_sel = [dict(g=k[0], mode=k[1], policy=k[2], e=round(st.mean(x[0] for x in v), 2),
+               q=round(st.mean(x[1] for x in v), 2), theta=v[0][2]) for k, v in sorted(_pol.items())]
+
+data = dict(policies=policies, sweep=sweep, damping=damping, ts=ts, real=real, m6=m6, int4=int4,
+            la=dict(curve=curve, dyn=dyn, sel=la_sel))
 html = (Path(__file__).parent / "template.html").read_text()
 html = html.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":")))
 (Path(__file__).parent / "index.html").write_text(html)

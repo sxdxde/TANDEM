@@ -1,0 +1,44 @@
+<section id="m6b">
+  <h2>7 · M6b: is the per-layer win just a layer effect?</h2>
+  <div class="prose">
+    <p><b>Hypothesis, stated before the test.</b> After M6 the working explanation was that the per-layer dynamic win is a layer effect. If so, a static profile built offline from group importance, by modality and layer, should capture it with zero tier moves.</p>
+    <p><b>Result: the hypothesis was falsified.</b> A static layer or role profile at matched energy has clearly worse quality than the dynamic policy. The explanation we gave for the M6 saving was partly wrong, and the layer part of it is retracted below.</p>
+  </div>
+
+  <h3>Method</h3>
+  <div class="prose">
+    <ul>
+      <li><b>Profile.</b> <code>kvtier/profile.py</code> computes the mean per-entry importance of each group. A static policy then puts every group at or above a threshold θ (in multiples of uniform attention) in HOT and the rest in WARM. No entry ever moves.</li>
+      <li><b>Two groupings.</b> (modality, layer), and (role, layer) where role is one of sink, prompt text, generated, visual.</li>
+      <li><b>Protocol, fixed in advance.</b> Leave-one-trace-out cross-validation: the profile and θ come from the other two traces and are scored on the held-out one. The selection rule is the earlier one (lowest energy with quality no worse than static). We also report an in-sample ceiling, where the profile is built on the trace it is scored on.</li>
+      <li><b>Grid.</b> Eight θ values from 0.05 to 4.0, on both dense and sparse-10% reads. Numbers below are means over the three held-out folds, against static modality.</li>
+    </ul>
+  </div>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 17 · Static layer profiles against the dynamic policy</div>
+    <div class="legend" id="lg-la"></div>
+    <div class="seg" role="group" aria-label="Read mode" id="la-seg"></div>
+    <div id="f-la"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-la"></div></details>
+    <figcaption id="cap-la"></figcaption>
+  </figure>
+
+  <h3>What the curve shows</h3>
+  <div class="prose">
+    <ul>
+      <li><b>The static role × layer profile traces a trade-off curve</b> and never reaches the dynamic point. On dense reads: θ 0.4 gives −5.3% energy at +5.0% quality loss, θ 0.7 gives −17% at +16%, θ 1.0 gives −23% at +26%, θ 2.0 gives −26% at +30%, θ 4.0 gives −27% at +41%. At matched energy of about −20%, the static profile loses roughly 16% to 26% on quality. The dynamic policy gets −19.8% energy at −3.0% quality, with about 1.2k tier moves per session.</li>
+      <li><b>(modality, layer) is degenerate.</b> For every θ of 0.4 or higher it selects exactly the 30 text groups, which is static modality (0.00% energy, 0.00% quality). Text entries are few and include the sink and recent tokens, so every text group has a mean per-entry importance of at least 4× uniform. Only θ of 0.2 or lower changes anything: it adds the layer-0 visual group, for +27.7% energy and −18.6% quality loss on dense reads (+23.8% and −19.2% on sparse). The cheap, stable end of the profile is just "also keep layer-0 visual in HOT".</li>
+      <li><b>This is not under-fitting or leakage.</b> At the θ chosen by the selection rule, the in-sample ceiling (+27.2% energy, −18.4% quality) is almost the same as the cross-validated result (+27.7%, −18.6%), with the same groups selected. The profile transfers across these images. Layer and role information is too coarse.</li>
+      <li><b>The selection rule was uninformative here.</b> "Quality no worse than static" picks θ = 0.2, a costlier operating point than dynamic. That is why the comparison is made at matched energy along the curve.</li>
+      <li><b>Under sparse reads dynamic still does not pay</b> (+5.9% energy, −3.7% quality). The static role × layer curve is a different operating point: from −2.6% energy at +7.1% quality loss down to −16.8% energy at +57.9%.</li>
+    </ul>
+  </div>
+
+  <div class="flag" style="max-width:78ch"><b>Correction to the M6 mechanism note.</b> M6 said the saving came from "demoting text entries in layers where text is unimportant". The energy arithmetic stands: text entries are about 45% of static energy, and the saving is about half of that. The layer part is wrong. No text layer group is unimportant on average. The saving comes from variation among individual text entries, meaning which prompt tokens matter in this prompt. Only a per-entry, online signal sees that. We have not instrumented the saving per entry, so this is still inference from the group statistics and the totals.</div>
+
+  <div class="prose">
+    <p><b>Net effect on the conclusion.</b> On real traces with dense reads, the dynamic policy's edge is real, and it comes from per-entry information. It is not a proxy for a layer or role prior. Under sparse reads the edge vanishes. Caveats as before: three images, one small model, a coarse θ grid of eight values, and only two static groupings as comparators.</p>
+  </div>
+</section>
+
