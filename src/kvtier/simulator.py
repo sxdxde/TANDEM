@@ -43,11 +43,12 @@ def run_session(
     tiers: dict[Tier, TierResource] | None = None,
     reconfig_manager: ReconfigurationManager | None = None,
     ema_decay: float = DEFAULT_EMA_DECAY,
+    bias_correct_ema: bool = False,
 ) -> SessionMetrics:
     """Simulate one trace session under ``policy``, returning aggregated metrics."""
     tiers = tiers if tiers is not None else {t: get_tier(t) for t in Tier}
     reconfig_manager = reconfig_manager or ReconfigurationManager(hot=tiers[Tier.HOT])
-    monitor = ImportanceMonitor(ema_decay=ema_decay)
+    monitor = ImportanceMonitor(ema_decay=ema_decay, bias_correct=bias_correct_ema)
     env = simpy.Environment()
     metrics = SessionMetrics(policy_name=policy.name)
 
@@ -92,6 +93,8 @@ def run_session(
             yield env.timeout(step_latency)
 
             monitor.update(active, step.attention_weights)
+            for entry in active.values():
+                entry.steps_since_move += 1
 
             reconfig_latency = 0.0
             reconfig_energy = 0.0

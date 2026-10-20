@@ -65,3 +65,31 @@ def test_dynamic_hybrid_holds_tier_within_hysteresis_band():
     hot_entry = _entry(Modality.TEXT, tier=Tier.HOT, importance=0.004)
     assert policy.update(warm_entry) is Tier.WARM
     assert policy.update(hot_entry) is Tier.HOT
+
+
+def test_dynamic_hybrid_warmup_blocks_early_moves():
+    policy = DynamicHybridPolicy(0.006, 0.002, warmup_steps=5)
+    entry = _entry(Modality.TEXT, tier=Tier.HOT, importance=0.0)
+    entry.observed_steps = 4
+    assert policy.update(entry) is Tier.HOT  # cold-start, would otherwise demote
+    entry.observed_steps = 5
+    assert policy.update(entry) is Tier.WARM
+
+
+def test_dynamic_hybrid_min_dwell_blocks_round_trips():
+    policy = DynamicHybridPolicy(0.006, 0.002, min_dwell_steps=3)
+    entry = _entry(Modality.VISUAL, tier=Tier.WARM, importance=0.01)
+    entry.steps_since_move = 2
+    assert policy.update(entry) is Tier.WARM
+    entry.steps_since_move = 3
+    assert policy.update(entry) is Tier.HOT
+
+
+def test_dynamic_hybrid_undamped_promotions_still_demote_damped():
+    policy = DynamicHybridPolicy(0.006, 0.002, min_dwell_steps=5, damp_promotions=False)
+    warm = _entry(Modality.VISUAL, tier=Tier.WARM, importance=0.01)
+    warm.steps_since_move = 0
+    hot = _entry(Modality.TEXT, tier=Tier.HOT, importance=0.0)
+    hot.steps_since_move = 0
+    assert policy.update(warm) is Tier.HOT   # promotion not damped
+    assert policy.update(hot) is Tier.HOT    # demotion damped

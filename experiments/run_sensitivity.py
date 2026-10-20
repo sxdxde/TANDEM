@@ -66,6 +66,9 @@ def main() -> None:
         cfg = yaml.safe_load(f)
     tiers = load_tier_config(CONFIG_PATH)
 
+    damping = {k: v for k, v in cfg["policy"]["dynamic_hybrid"].items()
+               if k in ("warmup_steps", "min_dwell_steps")}
+    print(f"Dynamic policy damping: {damping}")
     static = _run(cfg, tiers, StaticModalityPolicy(), 10.0)
     s_e, s_l = static.total_energy_pj, static.total_latency_ns
     s_q = static.mean_quality_loss
@@ -87,7 +90,7 @@ def main() -> None:
     for p, d, m in itertools.product(PROMOTE, DEMOTE, COST_MULT):
         if d >= p:
             continue
-        r = _run(cfg, tiers, DynamicHybridPolicy(p, d), m)
+        r = _run(cfg, tiers, DynamicHybridPolicy(p, d, **damping), m)
         rows.append(dict(
             promote=p, demote=d, cost_mult=m,
             energy_vs_static_pct=100 * (r.total_energy_pj / s_e - 1),

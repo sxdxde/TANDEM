@@ -66,22 +66,51 @@ class DynamicHybridPolicy:
     ``promote_threshold`` must be strictly greater than ``demote_threshold``
     so there is a dead band between them where an entry holds its current
     tier regardless of which direction it arrived from.
+
+    Two optional damping controls (both default 0 = off, the M3 behaviour):
+
+    - ``warmup_steps``: an entry may not move until its importance EMA has
+      been updated this many times. The EMA starts at 0, so without this a
+      HOT entry looks unimportant at step 0 and is demoted on cold-start
+      alone (observed in M4: 21 wasted demotions at step 0).
+    - ``min_dwell_steps``: after any tier change an entry must stay put this
+      many steps, which blocks the promote-then-demote round trips caused by
+      recency-driven importance spikes at the prefill/decode boundary.
+
+    ``damp_promotions`` (default True) applies both controls to promotions as
+    well. Set False to damp demotions only: salient WARM entries are then
+    promoted as soon as they cross the threshold, while a HOT entry still
+    can't be demoted on cold-start or immediately after a move.
     """
 
     name = "dynamic_hybrid"
 
-    def __init__(self, promote_threshold: float, demote_threshold: float):
+    def __init__(
+        self,
+        promote_threshold: float,
+        demote_threshold: float,
+        warmup_steps: int = 0,
+        min_dwell_steps: int = 0,
+        damp_promotions: bool = True,
+    ):
         if not demote_threshold < promote_threshold:
             raise ValueError("demote_threshold must be < promote_threshold (hysteresis band)")
         self.promote_threshold = promote_threshold
         self.demote_threshold = demote_threshold
+        self.warmup_steps = warmup_steps
+        self.min_dwell_steps = min_dwell_steps
+        self.damp_promotions = damp_promotions
 
     def initial_tier(self, entry: TokenKV) -> Tier:
         return Tier.WARM if entry.modality == Modality.VISUAL else Tier.HOT
 
     def update(self, entry: TokenKV) -> Tier:
+        damped = (
+            entry.observed_steps < self.warmup_steps
+            or entry.steps_since_move < self.min_dwell_steps
+        )
         if entry.tier == Tier.WARM and entry.importance > self.promote_threshold:
-            return Tier.HOT
+            return entry.tier if damped and self.damp_promotions else Tier.HOT
         if entry.tier == Tier.HOT and entry.importance < self.demote_threshold:
-            return Tier.WARM
+            return entry.tier if damped else Tier.WARM
         return entry.tier

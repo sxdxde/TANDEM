@@ -36,3 +36,23 @@ def test_update_ignores_entries_not_in_this_steps_weights():
     monitor.update(active, {0: 1.0})  # entry_b receives no attention this step
     assert entry_a.importance == 0.5
     assert entry_b.importance == 0.0
+
+
+def test_bias_correction_recovers_constant_signal_immediately():
+    entry = _entry(0)
+    monitor = ImportanceMonitor(ema_decay=0.9, bias_correct=True)
+    monitor.reset([entry])
+    for _ in range(3):
+        monitor.update({0: entry}, {0: 0.01})
+    assert entry.importance == pytest.approx(0.01)
+    assert entry.raw_importance < 0.01  # raw EMA is still biased toward 0
+    assert entry.observed_steps == 3
+
+
+def test_observed_steps_counts_updates():
+    entry = _entry(0)
+    monitor = ImportanceMonitor(ema_decay=0.9)
+    monitor.reset([entry])
+    monitor.update({0: entry}, {0: 0.01})
+    monitor.update({0: entry}, {0: 0.01})
+    assert entry.observed_steps == 2

@@ -91,6 +91,60 @@ Timeline observations (dynamic_hybrid):
   M3 churn explanation.
 - Dynamic's WARM attention share ends ~25% vs ~57% for static; gap is stable after step 12.
 
+## M4b: damping the dynamic policy (cold start + churn)
+Goal: remove the wasted reconfig cost seen in the step-0 burst and the boundary churn.
+Changes (all default to the old behaviour, so M3 results are reproducible):
+- `DynamicHybridPolicy(warmup_steps, min_dwell_steps, damp_promotions)`.
+  Warmup = entry can't move until its EMA has N updates; dwell = can't move for N steps
+  after creation/last move. `TokenKV` gained `observed_steps`, `steps_since_move`,
+  `raw_importance`; `ImportanceMonitor(bias_correct=...)`; `run_session(bias_correct_ema=...)`.
+- Script `experiments/run_damping_sweep.py` (6 warmup x 6 dwell x both damp_promotions,
+  mean of 5 trace seeds) -> `results/damping_sweep.csv`.
+
+Results (default thresholds 0.006/0.002, 10x reconfig, mean over 5 seeds, vs static):
+
+| variant | energy | quality loss | reconfig share of energy | tier moves |
+|---|---|---|---|---|
+| undamped (M3/M4) | +64.8% | -46.1% | 19.1% | 131 |
+| warmup 2 (chosen) | +55.8% | -49.3% | 13.0% | 85 |
+| dwell 20 | +49.5% | -37.9% | 13.0% | 81 |
+
+Observations:
+- **Warmup 2 strictly dominates undamped** on energy and quality, and has the best
+  quality-gain-per-energy ratio in the grid. Chosen as the new default
+  (`warmup_steps: 2`, `min_dwell_steps: 0`).
+- **Deviation from my pre-set rule.** I had fixed "lowest energy subject to >=20% quality
+  gain" before the run. That rule drifts to the edge of the quality budget (it picked
+  dwell 20, which gives away 11 points of quality gain just to do less). I switched to
+  gain-per-energy after seeing this, because warmup 2 dominates undamped outright. This was
+  a post-hoc choice and is recorded as such.
+- **Dwell 20 batches every move into one burst at step 19**: steady-state churn vanishes
+  but the first 20 steps serve 70-97% of attention from WARM. Slow reaction.
+- **Warmup ending the step-0 burst: no, it only moves it to step 1.** 20 TEXT demotions still
+  happen at step 1 because at decay 0.9 the EMA needs ~20 steps to converge, so text tokens
+  look unimportant at 2 updates. These are mostly *correct* demotions in this trace (text
+  gets low attention) arriving early, not pure noise. Remaining cost is real reconfig energy.
+- Warmup is redundant once dwell >= warmup (dwell counts from creation).
+- `damp_promotions=False` (damp demotions only) gave identical results at dwell 0 and no
+  benefit elsewhere; kept as an option, default True.
+- **Bias-corrected EMA tried (Adam-style): neutral, not adopted.** Median over a
+  threshold x warmup grid: energy +78.8% / quality -61.1% / efficiency 0.76, vs raw EMA
+  +55.9% / -49.3% / 0.86. It shifts the operating point (more promotions) rather than
+  improving the frontier, and the thresholds were calibrated on the raw EMA. Left in as
+  `bias_correct=False` by default. Would need recalibrated thresholds to judge fairly.
+- Remaining energy overhead (+55%) is mostly the inherent cost of reading promoted
+  salient tokens from HOT (reconfig is only 13% of dynamic energy). So the policy is
+  now close to "pays energy to buy quality" with little pure waste in this trace.
+- Re-ran with the new default (seed 0): dynamic_hybrid = 13.29M pJ, 1073.1k ns, quality
+  0.0174 (-48.8% vs static), 52 promotions / 33 demotions. At 1x / 10x / 20x reconfig cost
+  the energy overhead is +37.0% / +55.4% / +75.8% with identical -48.8% quality.
+  Sensitivity sweep: 48/174 configs beat static on both energy and quality
+  (best -22.7% energy at 10x, again via TEXT demotion).
+- Note: best efficiency in the threshold sweep is promote 0.008 / demote 0.001
+  (+35% energy for -38% quality), i.e. thresholds still matter more than damping.
+  Not adopted as default: efficiency is a heuristic, and the right operating point depends on
+  how the user weighs energy against quality.
+
 ## Open questions / caveats
 - The synthetic trace is the only workload; text gets very little attention. Results
   on the text-demotion side likely do not transfer to real VLMs (M5).
@@ -99,9 +153,11 @@ Timeline observations (dynamic_hybrid):
 - No quality-aware policy yet. The policy never sees quality; a promotion rule that
   targets attention-weighted loss directly, or a warmup / recency-damping fix for the
   boundary churn, is the natural next step.
-- Policy fix still open (see M4 step 3 observations).
+- Churn/cold-start fixes: done in M4b (partially; see above). Quality-aware policy still open.
+- Step-3 timeline/table numbers above are for the *undamped* M3 policy; M4b re-ran with warmup 2.
 
 ## Artifacts
 - `results/sensitivity_sweep.csv`, `results/sensitivity_references.csv`
 - `results/milestone4_comparison.csv`, `comparison_bars.png`, `tier_timeline.png`
+- `results/damping_sweep.csv`
 - `results/sensitivity_pareto.png`, `sensitivity_reconfig_cost.png`, `sensitivity_thresholds.png`

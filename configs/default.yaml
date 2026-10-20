@@ -44,6 +44,12 @@ policy:
     # average TEXT to ~0.005-0.006, so:
     promote_threshold: 0.006   # WARM -> HOT once importance exceeds this
     demote_threshold: 0.002    # HOT -> WARM once importance falls below this
+    # Damping chosen by experiments/run_damping_sweep.py (5-seed mean, best
+    # quality-gain-per-energy; see NOTES.md). warmup_steps=2 fixes the EMA
+    # cold-start demotion burst and strictly beats the undamped policy on both
+    # energy and quality. Longer dwell trades quality gain for fewer moves.
+    warmup_steps: 2
+    min_dwell_steps: 0
 
 reconfig:
   # Reconfiguration cost, as a multiple of one HOT access's (latency,

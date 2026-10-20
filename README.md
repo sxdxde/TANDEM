@@ -92,10 +92,11 @@ tiering actually survives reconfiguration overhead. See
 **Milestone 4** (comparison, visualization, sensitivity) is implemented. A
 quality penalty was added (`quant_error` per tier, attention-weighted) because
 an energy/latency-only comparison was degenerate: an all-WARM policy beat
-everything. With quality included, `dynamic_hybrid` trades +67% energy for
--45% quality loss vs `static_modality` at the default config; see `NOTES.md`
+everything. With quality included, `dynamic_hybrid` trades roughly +55% energy for
+-49% quality loss vs `static_modality` at the default config; see `NOTES.md`
 for the full log of observations and caveats (the 0.05 INT4 error is an
-assumption). Run `experiments/make_plots.py` and
+assumption). The dynamic policy now defaults to `warmup_steps: 2` (see the M4b
+section of `NOTES.md`). Run `experiments/make_plots.py` and
 `experiments/run_sensitivity.py`; outputs are in `results/`.
 
 Milestone 5 (real-VLM attention traces) is not yet implemented — see the

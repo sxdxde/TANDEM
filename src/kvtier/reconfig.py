@@ -50,6 +50,7 @@ class ReconfigurationManager:
         latency, energy = self.reconfig_cost(entry)
         entry.tier = new_tier
         entry.tier_changes += 1
+        entry.steps_since_move = 0
         return latency, energy
 
 

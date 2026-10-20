@@ -30,3 +30,6 @@ class TokenKV:
     tier: Tier                     # current tier, mutable as placement changes
     importance: float = 0.0        # EMA of attention weight received, updated live
     tier_changes: int = 0          # count of promotions/demotions this entry underwent
+    observed_steps: int = 0        # decode steps this entry's importance has been updated
+    steps_since_move: int = 0      # decode steps since creation or last tier change
+    raw_importance: float = 0.0    # uncorrected live EMA (see monitor.py bias_correct)
