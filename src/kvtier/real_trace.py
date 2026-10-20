@@ -116,6 +116,8 @@ def trace_from_layer_attention(
             modality=modality,
             size_bytes=size_bytes,
             tier=Tier.HOT,
+            layer=layer,
+            token=token,
         )
 
     session = TraceSession(entries=[])

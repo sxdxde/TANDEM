@@ -56,6 +56,28 @@ class StaticModalityPolicy:
         return entry.tier
 
 
+class LayerModalityPolicy:
+    """Static layer-aware placement: entries whose group (default (modality,
+    layer); see ``profile.GROUPINGS``) is in ``hot_groups`` (built offline) live in HOT, everything
+    else in WARM. No tier moves, so no reconfiguration cost."""
+
+    name = "layer_modality"
+
+    def __init__(self, hot_groups: set, group_fn=None, n_prefill_tokens: int = 0):
+        from kvtier.profile import modality_layer
+
+        self.hot_groups = set(hot_groups)
+        self.group_fn = group_fn or modality_layer
+        self.n_prefill_tokens = n_prefill_tokens
+
+    def initial_tier(self, entry: TokenKV) -> Tier:
+        in_hot = self.group_fn(entry, self.n_prefill_tokens) in self.hot_groups
+        return Tier.HOT if in_hot else Tier.WARM
+
+    def update(self, entry: TokenKV) -> Tier:
+        return entry.tier
+
+
 class DynamicHybridPolicy:
     """Starts entries at their modality-prior tier, then promotes/demotes
     based on live importance, with hysteresis to avoid flapping.

@@ -262,6 +262,44 @@ Observations:
   tier moves per session; with sparse reads it is not worth it at the default 10x reconfig cost.
   Caveats unchanged: 3 images, one 256M model, one held-out trace, selection on 2 traces.
 
+## M6b: layer-aware static baseline (tests the "it's a layer effect" hypothesis)
+Hypothesis (mine, after M6): the per-layer dynamic win is a layer effect, so a static
+(modality x layer) profile built offline should capture it with zero tier moves.
+Code: `kvtier/profile.py` (group importance per (modality, layer) or (role, layer), role =
+sink / prompt text / generated / visual), `LayerModalityPolicy`, `TokenKV.layer/.token`,
+`experiments/run_layer_aware.py`. Protocol fixed in advance: leave-one-trace-out CV (profile
+and theta from the other two traces, evaluate on the held-out one), same selection rule as
+before, plus an in-sample "ceiling". 59 tests pass. Results: `results/layer_aware_results.csv`,
+`results/layer_aware_theta_curve.csv`.
+
+Observations (means over the three held-out folds, vs static_modality):
+- **(modality, layer) grouping is degenerate**: for every theta >= 0.4 it selects exactly the 30
+  TEXT groups = static_modality (0.00% / 0.00%). Text entries are few and include the sink and
+  recent tokens, so every text group has mean per-entry importance >= 4x uniform. Only theta
+  <= 0.2 changes anything: it promotes one more group (the layer-0 visual entries), giving
+  +27.7% energy for -18.6% quality loss (dense), +23.8% / -19.2% (sparse10). The cheap,
+  stable end of the profile is therefore "also keep layer-0 visual in HOT".
+- **(role, layer) grouping traces a trade-off curve** (dense): theta 0.4: -5.3% energy /
+  +5.0% quality loss; 0.7: -17.4% / +16.1%; 1.0: -23.1% / +26.4%; 2.0: -26.0% / +30.5%;
+  4.0: -27.5% / +40.9%.
+- **Hypothesis falsified.** At matched energy (~-20%) the static role x layer profile has about
+  +16..+26% *worse* quality than static_modality, while the dynamic policy gets -19.8% energy at
+  -3.0% quality (dense, CV, ~1.2k tier moves). The profile's in-sample ceiling equals its
+  cross-validated result (-27.2% vs -27.5% etc., same selected groups), so this is not
+  under-fitting or leakage: the profile transfers across these images, but layer- and
+  role-level information is simply too coarse.
+- **Correction to the M6 mechanism note.** I wrote that the saving came from "demoting text
+  entries in layers where text is unimportant". The energy arithmetic (text entries are ~45% of
+  static energy; the saving is about half of that) still stands, but the *layer* part is wrong:
+  no text layer group is unimportant on average. The saving comes from per-token variation
+  among text entries (which individual prompt tokens matter in this prompt), which only a
+  per-entry, online signal sees.
+- **Net:** on real traces with dense reads the dynamic policy's advantage is real and
+  specific to per-entry information, not a proxy for a layer/role prior. Under sparse reads
+  it still does not pay (static role x layer at +23.8..-16.8% energy is a different, costlier
+  operating point and dynamic is +5.9% energy / -3.7% quality). Caveats as before: 3 images, one
+  small model, theta grid coarse (8 values), static comparators limited to two groupings.
+
 ## Open questions / caveats
 - Synthetic M4 conclusions did not replicate on real traces (see M5); treat the M4
   quality-vs-energy numbers as a property of the synthetic trace, not of VLMs.
@@ -270,11 +308,12 @@ Observations:
 - WARM quant error 0.05 in the config is below the measured ~0.09 (M6); ratios vs static are
   unaffected, absolute quality values are ~1.8x too small.
 - Latency is a serialized total-work figure (see `metrics.py`), not wall-clock.
-- Next candidates (per-layer, sparse model and INT4 measurement done in M6): per-head entries;
-  natural images / documents and a larger VLM; sweep reconfig cost and top-k fraction on real
-  traces; a layer-aware static prior (modality x layer) as a stronger baseline than
-  static_modality, since the per-layer dynamic win looks like it comes from a layer effect;
-  a real approximate importance estimator for sparse access; oracle top-k comparison (M5 plan).
+- Next candidates (per-layer, sparse model, INT4 measurement, layer-aware static baseline done):
+  per-head entries; natural images / documents and a larger VLM (the main external-validity
+  gap); sweep reconfig cost and top-k fraction on real traces (does dynamic survive 20x cost?);
+  a cheaper dynamic policy (fewer than ~1.2k moves/session); a real approximate importance
+  estimator for sparse access; oracle top-k comparison (M5 plan); using the sparse selector's
+  top-k set as the tier signal (hypothesis only, untested).
 - No quality-aware policy yet. The policy never sees quality; a promotion rule that
   targets attention-weighted loss directly, or a warmup / recency-damping fix for the
   boundary churn, is the natural next step.
@@ -284,6 +323,7 @@ Observations:
 ## Artifacts
 - `results/sensitivity_sweep.csv`, `results/sensitivity_references.csv`
 - `results/milestone4_comparison.csv`, `comparison_bars.png`, `tier_timeline.png`
+- `results/layer_aware_results.csv`, `layer_aware_theta_curve.csv`
 - `results/m6_results.csv`, `m6_sweep.csv`, `int4_error.csv`, `traces/*_layers.npz`
 - `traces/{chart,scene,noise_label}.npz`, `results/real_trace_results.csv`, `results/real_trace_sweep.csv`
 - `results/damping_sweep.csv`

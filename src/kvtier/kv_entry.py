@@ -33,3 +33,5 @@ class TokenKV:
     observed_steps: int = 0        # decode steps this entry's importance has been updated
     steps_since_move: int = 0      # decode steps since creation or last tier change
     raw_importance: float = 0.0    # uncorrected live EMA (see monitor.py bias_correct)
+    layer: int = 0                 # transformer layer index for per-layer traces (Milestone 6)
+    token: int = 0                 # token index (per-layer traces); entries of one token share it

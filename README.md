@@ -112,7 +112,10 @@ error) is implemented (`experiments/run_m6.py`). With one entry per
 (token, layer) and dense reads, the dynamic policy saves ~20% energy vs static
 at roughly neutral quality; with sparse reads that benefit disappears. Measured
 INT4 error is ~0.09, not the assumed 0.05 (ratios unaffected). Details and
-caveats in `NOTES.md`.
+caveats in `NOTES.md`. A cross-validated layer/role-aware *static* baseline
+(`experiments/run_layer_aware.py`) does not match the dynamic policy at equal
+energy (about +16..+26% worse quality), so its advantage on real dense-read
+traces comes from per-entry information, not a layer prior.
 
 ## Repository structure
 
