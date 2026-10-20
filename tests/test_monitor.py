@@ -1,3 +1,5 @@
+import pytest
+
 from kvtier.kv_entry import Modality, Tier, TokenKV
 from kvtier.monitor import ImportanceMonitor
 
