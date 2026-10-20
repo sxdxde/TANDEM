@@ -1,0 +1,1318 @@
+<title>KV-Tier Lab Report</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+/* Layout: one reading column (68ch) for prose, figures break out to a wider
+   measure. Lab-notebook voice: serif headings, sans body, mono for every
+   number that carries a unit. HOT = warm vermilion, WARM = cool blue, used
+   only for tier diagrams; policy series use the validated categorical slots. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --fg: #10202e;
+  --fg2: #47586a;
+  --muted: #6f7e8c;
+  --rule: #d9e0e7;
+  --axis: #b9c4ce;
+  --accent: #c4471a;
+  --hot-tint: #fbe6dc;
+  --hot-ink: #8a2f0e;
+  --warm-tint: #dce9f7;
+  --warm-ink: #15487f;
+  --pos: #0b6b32;
+  --pos-tint: #dff3e5;
+  --neg: #a8231b;
+  --neg-tint: #fbe3e0;
+  --neu: #5b4d00;
+  --neu-tint: #f4ecc6;
+  --s1: #2a78d6;
+  --s2: #eb6834;
+  --s3: #1baf7a;
+  --s4: #eda100;
+  --seg: #aab5bf;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f161d; --surface: #171e26; --fg: #e8edf2; --fg2: #b4c0cc; --muted: #8696a6;
+    --rule: #27323d; --axis: #3a4856; --accent: #f0743f;
+    --hot-tint: #3a2018; --hot-ink: #f4a98a; --warm-tint: #162b44; --warm-ink: #9cc4f0;
+    --pos: #7fd69a; --pos-tint: #14301f; --neg: #f19a93; --neg-tint: #3b1a17; --neu: #e8d27a; --neu-tint: #33300f;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --seg: #4a5866;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f161d; --surface: #171e26; --fg: #e8edf2; --fg2: #b4c0cc; --muted: #8696a6;
+  --rule: #27323d; --axis: #3a4856; --accent: #f0743f;
+  --hot-tint: #3a2018; --hot-ink: #f4a98a; --warm-tint: #162b44; --warm-ink: #9cc4f0;
+  --pos: #7fd69a; --pos-tint: #14301f; --neg: #f19a93; --neg-tint: #3b1a17; --neu: #e8d27a; --neu-tint: #33300f;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --seg: #4a5866;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 17px; line-height: 1.6;
+  padding-block: 0 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1000px; margin: 0 auto; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 700; line-height: 1.15; text-wrap: balance; margin: 0; }
+h2 { font-size: 1.85rem; margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--rule); }
+h3 { font-size: 1.25rem; font-weight: 600; margin-top: 36px; }
+p { margin: 14px 0 0; }
+a { color: var(--warm-ink); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+code { background: var(--surface); border: 1px solid var(--rule); border-radius: 4px; padding: 1px 5px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+/* masthead */
+.mast { padding-block: 56px 8px; }
+.mast h1 { font-size: clamp(2.4rem, 7vw, 4.2rem); letter-spacing: -0.01em; margin-top: 10px; }
+.mast .tier-strip { display: flex; height: 8px; margin-top: 22px; max-width: 360px; border-radius: 4px; overflow: hidden; }
+.tier-strip i:first-child { background: var(--accent); flex: 1; }
+.tier-strip i:last-child { background: var(--s1); flex: 3; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 18px; color: var(--fg2); font-size: 14px; }
+.meta span { font-family: var(--mono); font-size: 12.5px; }
+.toc { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 8px 6px; padding: 0; list-style: none; }
+.toc a { display: inline-block; padding: 4px 10px; border: 1px solid var(--rule); border-radius: 999px; font-size: 14px; text-decoration: none; color: var(--fg2); background: var(--surface); }
+.toc a:hover { border-color: var(--fg2); color: var(--fg); }
+
+/* at a glance */
+.glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-top: 28px; }
+.glance div { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; min-width: 0; }
+.glance b { display: block; font-family: var(--mono); font-size: 1.5rem; font-weight: 500; line-height: 1.2; }
+.glance span { display: block; font-size: 14px; color: var(--fg2); margin-top: 4px; }
+
+/* figures */
+figure { margin: 26px 0 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 16px 16px 14px; min-width: 0; }
+figcaption { font-size: 14.5px; color: var(--fg2); margin-top: 12px; max-width: 80ch; }
+figcaption b { color: var(--fg); font-weight: 600; }
+.fig-title { font-weight: 600; font-size: 15px; margin-bottom: 8px; }
+.scroll-x { overflow-x: auto; }
+.scroll-x > svg { display: block; }
+.panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px 22px; }
+.panels > div { min-width: 0; }
+.panel-h { font-size: 13px; color: var(--fg2); font-family: var(--mono); margin-bottom: 4px; }
+svg text { font-family: var(--sans); }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.t { fill: var(--muted); font: 11px var(--mono); }
+.tl { fill: var(--fg2); font: 12.5px var(--sans); }
+.tv { fill: var(--fg); font: 500 12px var(--mono); }
+.grid { stroke: var(--rule); stroke-width: 1; }
+.axis { stroke: var(--axis); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--fg2); margin-bottom: 10px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.legend i.ring { background: transparent; border: 2px solid currentColor; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+.seg button { font: 500 13px var(--mono); padding: 5px 12px; background: var(--surface); color: var(--fg2); border: 0; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+#tip { position: fixed; z-index: 50; pointer-events: none; background: var(--fg); color: var(--bg); font: 12.5px/1.45 var(--mono); padding: 7px 10px; border-radius: 6px; max-width: 280px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+details.table-view { margin-top: 12px; font-size: 14px; }
+details.table-view summary { cursor: pointer; color: var(--fg2); }
+.tv-wrap { overflow-x: auto; margin-top: 8px; max-height: 320px; overflow-y: auto; }
+
+/* tables */
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--fg2); font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; background: var(--surface); position: sticky; top: 0; }
+td.n, th.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tbl { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; margin-top: 18px; overflow-x: auto; }
+.tbl table { min-width: 560px; }
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl.wide table { min-width: 820px; }
+
+/* chronology */
+.chrono { margin-top: 30px; border-left: 2px solid var(--rule); padding-left: 22px; display: grid; gap: 34px; }
+.step { position: relative; min-width: 0; }
+.step::before { content: ""; position: absolute; left: -29px; top: 7px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg); border: 2px solid var(--fg2); }
+.step.pos::before { border-color: var(--pos); } .step.neg::before { border-color: var(--neg); } .step.neu::before { border-color: var(--neu); }
+.step h3 { margin-top: 4px; font-size: 1.2rem; }
+.step-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.step ul { margin: 10px 0 0; padding-left: 20px; max-width: 72ch; }
+.step li { margin-top: 6px; }
+.badge { font: 600 12px var(--mono); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.badge.pos { color: var(--pos); background: var(--pos-tint); }
+.badge.neg { color: var(--neg); background: var(--neg-tint); }
+.badge.neu { color: var(--neu); background: var(--neu-tint); }
+.ledger { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; max-width: 78ch; }
+.ledger li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; }
+
+/* assumption callout */
+.flag { margin-top: 18px; padding: 12px 16px; border: 1px solid var(--accent); border-radius: 8px; background: var(--hot-tint); color: var(--hot-ink); font-size: 15.5px; max-width: 78ch; }
+.pending { margin-top: 18px; padding: 18px 20px; border: 2px dashed var(--axis); border-radius: 8px; color: var(--fg2); max-width: 78ch; }
+.pending b { color: var(--fg); }
+footer { margin-top: 72px; padding-top: 18px; border-top: 1px solid var(--rule); color: var(--fg2); font-size: 14px; }
+footer ul { padding-left: 18px; margin: 8px 0 0; }
+
+/* diagrams */
+.diagram svg { display: block; max-width: 100%; height: auto; }
+.dg-box { fill: var(--surface); stroke: var(--fg2); stroke-width: 1.4; }
+.dg-hot { fill: var(--hot-tint); stroke: var(--accent); stroke-width: 1.6; }
+.dg-warm { fill: var(--warm-tint); stroke: var(--s1); stroke-width: 1.6; }
+.dg-group { fill: none; stroke: var(--axis); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.dg-t { fill: var(--fg); font: 600 13px var(--sans); }
+.dg-s { fill: var(--fg2); font: 11.5px var(--mono); }
+.dg-l { fill: var(--fg2); font: 11.5px var(--sans); }
+.dg-ln { stroke: var(--fg2); stroke-width: 1.5; fill: none; }
+.dg-ah { fill: var(--fg2); }
+.dg-hot-t { fill: var(--hot-ink); font: 700 14px var(--serif); }
+.dg-warm-t { fill: var(--warm-ink); font: 700 14px var(--serif); }
+@media (prefers-reduced-motion: no-preference) { .toc a { transition: border-color .15s; } }
+@media (max-width: 520px) { body { font-size: 16.5px; } h2 { font-size: 1.55rem; margin-top: 56px; } .step::before { left: -28px; } }
+</style>
+
+<div class="wrap">
+<header class="mast">
+  <div class="eyebrow">Research lab report · tiered KV cache for vision-language models</div>
+  <h1>KV-Tier</h1>
+  <div class="tier-strip" aria-hidden="true"><i></i><i></i></div>
+  <div class="meta">
+    <span>Updated 2026-10-20</span>
+    <span>Simulator: SimPy</span>
+    <span>Real traces: SmolVLM-256M-Instruct</span>
+    <span id="metaCommit">Repo HEAD 31e94c4</span>
+  </div>
+  <ul class="toc">
+    <li><a href="#abstract">Abstract</a></li>
+    <li><a href="#system">System</a></li>
+    <li><a href="#model">Cost model</a></li>
+    <li><a href="#method">Method and findings</a></li>
+    <li><a href="#evidence">Evidence</a></li>
+    <li><a href="#m6">M6</a></li>
+    <li><a href="#decisions">Decision log</a></li>
+    <li><a href="#limits">Limits and next steps</a></li>
+    <li><a href="#conclusion">Conclusion</a></li>
+  </ul>
+</header>
+
+<main>
+<section id="abstract">
+  <h2 style="border-top:0;margin-top:40px;padding-top:0">1 · Abstract</h2>
+  <div class="prose">
+    <p>KV-Tier simulates a two-tier KV cache for vision-language model decoding. The HOT tier holds entries in FP16 on conventional DRAM or HBM. The WARM tier is a compute-in-memory tier that holds entries in INT4: about ten times cheaper per byte in energy, about one and a half times slower, and lossy. We built a SimPy simulator, a synthetic attention trace, and a dynamic policy that moves entries between tiers from a live importance estimate. Every move is charged.</p>
+    <p>On the synthetic trace the dynamic policy buys about 49% less quality loss for about 55% more energy than a fixed split by modality. On real attention traces from SmolVLM-256M that trade-off does not appear. Visual tokens receive about 6% of attention, the fixed split is already near the quality floor, and thresholds picked on two traces failed the no-worse-quality check on a third. A sixth round (M6) tested per-layer entries and sparse reads. Per-layer entries with dense reads give the first real-trace dynamic win, about 20% less energy at roughly neutral quality, with a marginal +0.8% held-out quality miss of the strict rule. With sparse reads the win disappears. M6 also measured the INT4 error at about 0.09, against the 0.05 we assumed. That scales absolute quality values by about 1.8× and leaves every ratio unchanged. This page records each step, including the dead ends and one post-hoc choice.</p>
+  </div>
+  <div class="glance">
+    <div><b>−88%</b><span>energy of static modality split vs all-HOT, for +34% latency (M2)</span></div>
+    <div><b>+55% / −49%</b><span>energy / quality loss of dynamic vs static, synthetic trace, 10× move cost</span></div>
+    <div><b>6%</b><span>of attention mass lands on visual tokens in real traces, which are 95% of entries</span></div>
+    <div><b>+11.9%</b><span>quality loss vs static on the held-out real trace (criterion: no worse). Failed (M5).</span></div>
+    <div><b>−20%</b><span>energy vs static with per-layer entries and dense reads; held-out quality +0.8%, a marginal miss (M6)</span></div>
+  </div>
+
+  <h3>Motivation</h3>
+  <div class="prose">
+    <p>A vision-language model decoding an answer reads a KV cache dominated by visual tokens. In our real traces 832 of 876 prompt positions are image patches. Most of them are almost never used: the median visual token receives 0.02× the attention of a uniform spread. A small set is used constantly, and that set stays stable across decoding.</p>
+    <p>A tiered memory can exploit that skew. Keep the few important entries in precise, fast memory and park the rest in a cheap compute-in-memory tier. The open question is placement. A fixed rule by modality is free. A dynamic rule can follow actual attention but pays for every move. This project asks whether the dynamic rule earns its cost. It responds to published KV-cache work such as HybridKV, ZipVL, AirCache and VL-Cache.</p>
+  </div>
+</section>
+
+<section id="system">
+  <h2>2 · System</h2>
+  <div class="prose"><p>A trace supplies prefill entries and one attention distribution per decode step. The simulator replays it against a placement policy, charges each access to the tier the entry lives in, and records metrics per step. Traces are either synthetic or taken from a real model; the simulator does not know which.</p></div>
+
+  <figure class="diagram">
+    <div class="scroll-x">
+    <svg viewBox="0 0 960 360" width="960" height="360" style="min-width:760px" role="img" aria-label="Data flow: a synthetic or real trace feeds the SimPy simulator, which contains the tier cost model, importance monitor, placement policy and reconfiguration manager, and emits per-step metrics.">
+      <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="dg-ah"/></marker></defs>
+      <rect class="dg-box" x="10" y="70" width="190" height="70" rx="6"/>
+      <text class="dg-t" x="105" y="98" text-anchor="middle">Synthetic trace</text>
+      <text class="dg-s" x="105" y="118" text-anchor="middle">trace.py · seeded</text>
+      <rect class="dg-box" x="10" y="200" width="190" height="70" rx="6"/>
+      <text class="dg-t" x="105" y="228" text-anchor="middle">Real VLM trace</text>
+      <text class="dg-s" x="105" y="248" text-anchor="middle">real_trace.py · npz</text>
+      <line class="dg-ln" x1="200" y1="105" x2="236" y2="150" marker-end="url(#ah)"/>
+      <line class="dg-ln" x1="200" y1="235" x2="236" y2="190" marker-end="url(#ah)"/>
+      <rect class="dg-group" x="240" y="20" width="480" height="320" rx="10"/>
+      <text class="dg-t" x="260" y="46">SimPy simulator · simulator.py</text>
+      <rect class="dg-box" x="260" y="70" width="180" height="76" rx="6"/>
+      <text class="dg-t" x="350" y="98" text-anchor="middle">Importance monitor</text>
+      <text class="dg-s" x="350" y="118" text-anchor="middle">live EMA per entry</text>
+      <text class="dg-s" x="350" y="134" text-anchor="middle">monitor.py</text>
+      <rect class="dg-box" x="520" y="70" width="180" height="76" rx="6"/>
+      <text class="dg-t" x="610" y="98" text-anchor="middle">Placement policy</text>
+      <text class="dg-s" x="610" y="118" text-anchor="middle">thresholds, warmup</text>
+      <text class="dg-s" x="610" y="134" text-anchor="middle">policy.py</text>
+      <line class="dg-ln" x1="440" y1="108" x2="518" y2="108" marker-end="url(#ah)"/>
+      <text class="dg-l" x="479" y="100" text-anchor="middle">importance</text>
+      <rect class="dg-box" x="520" y="214" width="180" height="76" rx="6"/>
+      <text class="dg-t" x="610" y="242" text-anchor="middle">Reconfiguration</text>
+      <text class="dg-s" x="610" y="262" text-anchor="middle">10× HOT access / move</text>
+      <text class="dg-s" x="610" y="278" text-anchor="middle">reconfig.py</text>
+      <line class="dg-ln" x1="610" y1="146" x2="610" y2="212" marker-end="url(#ah)"/>
+      <text class="dg-l" x="620" y="184">move request</text>
+      <rect class="dg-hot" x="260" y="214" width="180" height="76" rx="6"/>
+      <text class="dg-t" x="350" y="242" text-anchor="middle">Tier cost model</text>
+      <text class="dg-s" x="350" y="262" text-anchor="middle">HOT · WARM per access</text>
+      <text class="dg-s" x="350" y="278" text-anchor="middle">tiers.py</text>
+      <line class="dg-ln" x1="520" y1="252" x2="442" y2="252" marker-end="url(#ah)"/>
+      <text class="dg-l" x="481" y="244" text-anchor="middle">prices</text>
+      <line class="dg-ln" x1="720" y1="180" x2="758" y2="180" marker-end="url(#ah)"/>
+      <rect class="dg-box" x="760" y="70" width="190" height="220" rx="6"/>
+      <text class="dg-t" x="855" y="98" text-anchor="middle">Metrics</text>
+      <text class="dg-s" x="855" y="118" text-anchor="middle">metrics.py · per step</text>
+      <text class="dg-s" x="778" y="150">energy (pJ)</text>
+      <text class="dg-s" x="778" y="172">latency (ns)</text>
+      <text class="dg-s" x="778" y="194">quality loss</text>
+      <text class="dg-s" x="778" y="216">WARM attention mass</text>
+      <text class="dg-s" x="778" y="238">promotions, demotions</text>
+      <text class="dg-s" x="778" y="260">reconfig energy share</text>
+    </svg>
+    </div>
+    <figcaption><b>Figure 1.</b> Data flow. A trace feeds the simulator. The policy reads the monitor's importance and asks the reconfiguration manager to move entries. Every access and move is priced by the tier model, and everything lands in per-step metrics.</figcaption>
+  </figure>
+
+  <figure class="diagram">
+    <div class="scroll-x">
+    <svg viewBox="0 0 760 310" width="760" height="310" style="min-width:640px" role="img" aria-label="The two tiers. HOT stores FP16 with low latency and high per-byte energy. WARM stores INT4 with 1.5 times the latency, a tenth of the energy per byte and an assumed 0.05 relative error. Moves between tiers cost ten HOT accesses.">
+      <rect class="dg-hot" x="10" y="20" width="290" height="230" rx="8"/>
+      <text class="dg-hot-t" x="30" y="52">HOT · FP16</text>
+      <text class="dg-s" x="30" y="84">2 bytes per element</text>
+      <text class="dg-s" x="30" y="110">20 ns + 0.01 ns per byte</text>
+      <text class="dg-s" x="30" y="136">5 pJ + 8 pJ per byte</text>
+      <text class="dg-s" x="30" y="162">quant error 0 (reference)</text>
+      <text class="dg-l" x="30" y="206">conventional DRAM or HBM</text>
+      <text class="dg-l" x="30" y="226">modality prior: TEXT starts here</text>
+      <rect class="dg-warm" x="460" y="20" width="290" height="230" rx="8"/>
+      <text class="dg-warm-t" x="480" y="52">WARM · INT4</text>
+      <text class="dg-s" x="480" y="84">0.5 bytes per element</text>
+      <text class="dg-s" x="480" y="110">30 ns + 0.015 ns per byte</text>
+      <text class="dg-s" x="480" y="136">0.5 pJ + 0.8 pJ per byte</text>
+      <text class="dg-s" x="480" y="162">quant error 0.05 (assumed)</text>
+      <text class="dg-l" x="480" y="206">compute-in-memory tier</text>
+      <text class="dg-l" x="480" y="226">modality prior: VISUAL starts here</text>
+      <line class="dg-ln" x1="456" y1="90" x2="304" y2="90" marker-end="url(#ah2)"/>
+      <text class="dg-l" x="380" y="80" text-anchor="middle">promote</text>
+      <line class="dg-ln" x1="304" y1="170" x2="456" y2="170" marker-end="url(#ah2)"/>
+      <text class="dg-l" x="380" y="190" text-anchor="middle">demote</text>
+      <text class="dg-s" x="380" y="130" text-anchor="middle">10× HOT access</text>
+      <text class="dg-s" x="380" y="146" text-anchor="middle">per move</text>
+      <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="dg-ah"/></marker></defs>
+      <text class="dg-l" x="380" y="290" text-anchor="middle">WARM vs HOT: 0.1× energy per byte, 1.5× latency, ¼ the bytes</text>
+    </svg>
+    </div>
+    <figcaption><b>Figure 2.</b> The tier model, with the constants from <code>configs/default.yaml</code>. Moves in either direction cost the same: read, requantize and write, priced as ten HOT accesses in latency and in energy.</figcaption>
+  </figure>
+
+  <figure class="diagram">
+    <div class="scroll-x">
+    <svg viewBox="0 0 600 470" width="600" height="470" style="min-width:420px" role="img" aria-label="One decode step: create the new entry, charge every active entry's access, advance the clock, update importance, ask the policy for moves, charge moves, record metrics, then repeat for the next step.">
+      <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="dg-ah"/></marker></defs>
+      <g>
+        <rect class="dg-box" x="20" y="10" width="440" height="52" rx="6"/><text class="dg-t" x="36" y="32">1  New entry</text><text class="dg-s" x="36" y="50">placed at policy.initial_tier()</text>
+        <rect class="dg-box" x="20" y="88" width="440" height="52" rx="6"/><text class="dg-t" x="36" y="110">2  Charge accesses</text><text class="dg-s" x="36" y="128">every active entry, at its current tier: ns, pJ, quality loss</text>
+        <rect class="dg-box" x="20" y="166" width="440" height="52" rx="6"/><text class="dg-t" x="36" y="188">3  Advance the clock</text><text class="dg-s" x="36" y="206">by the step's total access latency (serialized)</text>
+        <rect class="dg-box" x="20" y="244" width="440" height="52" rx="6"/><text class="dg-t" x="36" y="266">4  Update importance</text><text class="dg-s" x="36" y="284">EMA from this step's weights only, no look-ahead</text>
+        <rect class="dg-box" x="20" y="322" width="440" height="52" rx="6"/><text class="dg-t" x="36" y="344">5  Ask the policy</text><text class="dg-s" x="36" y="362">warmup, thresholds with a hysteresis band, optional dwell</text>
+        <rect class="dg-box" x="20" y="400" width="440" height="52" rx="6"/><text class="dg-t" x="36" y="422">6  Charge moves, record</text><text class="dg-s" x="36" y="440">10× HOT per move, then one StepMetrics row</text>
+      </g>
+      <line class="dg-ln" x1="240" y1="62" x2="240" y2="86" marker-end="url(#ah3)"/>
+      <line class="dg-ln" x1="240" y1="140" x2="240" y2="164" marker-end="url(#ah3)"/>
+      <line class="dg-ln" x1="240" y1="218" x2="240" y2="242" marker-end="url(#ah3)"/>
+      <line class="dg-ln" x1="240" y1="296" x2="240" y2="320" marker-end="url(#ah3)"/>
+      <line class="dg-ln" x1="240" y1="374" x2="240" y2="398" marker-end="url(#ah3)"/>
+      <path class="dg-ln" d="M460 426 H520 V36 H462" marker-end="url(#ah3)"/>
+      <text class="dg-l" x="530" y="238">next decode</text>
+      <text class="dg-l" x="530" y="254">step</text>
+    </svg>
+    </div>
+    <figcaption><b>Figure 3.</b> One decode step. Prefill is not charged because the trace only models attention during decode. Importance is updated from the current step's weights alone, so a policy never sees the future.</figcaption>
+  </figure>
+</section>
+
+<section id="model">
+  <h2>3 · Cost model and metrics</h2>
+  <div class="prose">
+    <p>Each tier charges a fixed overhead plus a cost linear in the entry's effective size in that tier. An entry's size is stored at FP16 and rescaled by the tier's bytes per element, so WARM both moves fewer bytes and pays less per byte.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Quantity</th><th>Definition</th></tr></thead>
+    <tbody>
+      <tr><td>Access latency</td><td class="mono">base_ns + ns_per_byte × effective_bytes</td></tr>
+      <tr><td>Access energy</td><td class="mono">base_pJ + pJ_per_byte × effective_bytes</td></tr>
+      <tr><td>Move cost</td><td class="mono">10 × one HOT access, latency and energy, either direction</td></tr>
+      <tr><td>Total latency</td><td>Sum of per-access latencies, fully serialized. A total-work upper bound, not wall-clock.</td></tr>
+      <tr><td>Quality loss (per step)</td><td class="mono">Σ attention_weight × tier.quant_error</td></tr>
+      <tr><td>Mean quality loss</td><td>Per-step quality loss averaged over decode steps. Zero for flat, 0.05 for all-WARM.</td></tr>
+      <tr><td>WARM attention mass</td><td>Fraction of each step's attention weight served from WARM, averaged over steps.</td></tr>
+      <tr><td>Efficiency (M4b)</td><td class="mono">−quality change % ÷ energy change %, both vs static. A heuristic, not an objective.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="flag"><b>Assumed, then measured:</b> the WARM quantization error is set to 0.05 in the config. It began as an order-of-magnitude guess. M6 measured about 0.09 on SmolVLM's KV cache (section 6). Quality loss is linear in the error, so absolute quality values on this page are about 1.8× too small. Every ratio against static is unaffected. The config was left at 0.05 so committed results reproduce.</div>
+  <h3>Other assumptions</h3>
+  <div class="prose">
+    <ul>
+      <li>Every active entry is read once per decode step, regardless of its attention weight. Real systems skip low-attention tokens. M6 adds an optional sparse mode that reads only the top 10% by importance.</li>
+      <li>Quality is a reported axis. It is not folded into a scalar cost, and policies cannot see it.</li>
+      <li>The WARM energy ratio of 0.1 and latency ratio of 1.5 are named constants chosen to match commonly cited compute-in-memory trade-offs, not fitted to hardware.</li>
+      <li>One KV entry per token by default. Real caches are per layer and per head. M5 traces average attention over 30 layers and 9 heads; M6 adds per-layer entries, still averaged over heads.</li>
+      <li>Synthetic trace: 20 text and 500 visual tokens, 64 decode steps, 8% of visual tokens salient, seed 0 unless a sweep says otherwise.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="method">
+  <h2>4 · Method and findings, in order</h2>
+  <div class="prose"><p>Each entry says what we did, what we saw, and whether it helped. Green marks a result that held up, red marks a result that went against us, amber marks a result that changed nothing. Numbers are from <code>NOTES.md</code> and the CSVs in <code>results/</code>.</p></div>
+  <div class="chrono">
+
+    <article class="step pos">
+      <div class="step-head"><span class="eyebrow">M1</span><span class="badge pos">▲ held</span></div>
+      <h3>Synthetic trace and tier cost model</h3>
+      <ul>
+        <li>Built a prefill-plus-decode trace where attention mixes recency with a small fixed set of salient visual tokens, then fixed the HOT and WARM cost constants.</li>
+        <li>The validation plot showed salient visual tokens settling near an importance of 0.0088 and average text near 0.005 to 0.006. The first policy thresholds (promote 0.006, demote 0.002) came from that plot.</li>
+      </ul>
+    </article>
+
+    <article class="step pos">
+      <div class="step-head"><span class="eyebrow">M2</span><span class="badge pos">▲ held</span></div>
+      <h3>SimPy simulator and two static baselines</h3>
+      <ul>
+        <li>Flat (everything HOT) and static modality (text HOT, visual WARM).</li>
+        <li>Static modality cuts energy 88.2% against flat (72.6M pJ to 8.55M pJ) and costs 33.7% more latency (797.7k ns to 1066.5k ns).</li>
+      </ul>
+    </article>
+
+    <article class="step neg">
+      <div class="step-head"><span class="eyebrow">M3</span><span class="badge neg">▼ lost</span></div>
+      <h3>Dynamic hybrid policy with move cost</h3>
+      <ul>
+        <li>Entries start at their modality tier and move on a live importance EMA with a hysteresis band.</li>
+        <li>It lost to static: +67% energy and +2% latency, with 82 promotions and 64 demotions.</li>
+        <li>Cause: entries near the prefill/decode boundary get a high early weight from position alone, get promoted, then demoted as recency fades. Each round trip pays the move cost.</li>
+      </ul>
+    </article>
+
+    <article class="step neg">
+      <div class="step-head"><span class="eyebrow">M4 · step 1</span><span class="badge neg">▼ model was degenerate</span></div>
+      <h3>Sensitivity sweep on energy and latency only</h3>
+      <ul>
+        <li>174 configurations: promote and demote thresholds crossed with six move-cost multipliers.</li>
+        <li>87 of 174 beat static on energy, but the best ones had zero or one promotion. They only demoted text to WARM.</li>
+        <li>A trivial all-WARM policy reached −78.6% energy and +2.6% latency against static, beating every dynamic configuration.</li>
+        <li>Cause: nothing penalised INT4, and WARM has unlimited capacity, so HOT had no reason to exist. The comparison could not say anything about placement.</li>
+        <li>Decision: add a quality penalty for reading from WARM (the user chose this over a HOT capacity limit).</li>
+      </ul>
+    </article>
+
+    <article class="step pos">
+      <div class="step-head"><span class="eyebrow">M4 · step 2</span><span class="badge pos">▲ held (synthetic only)</span></div>
+      <h3>Quality penalty added</h3>
+      <ul>
+        <li>Each tier carries a <code>quant_error</code>. The simulator accrues attention-weighted quality loss and WARM attention mass.</li>
+        <li>All-WARM now has the worst quality (0.050, against 0.034 for static and 0 for flat), so the degeneracy is gone.</li>
+        <li>24 of 174 configurations beat static on both energy and quality, but quality improved only 0.27%. The energy win came from demoting low-attention text, which says more about the synthetic trace than about the policy.</li>
+        <li>The real trade-off was on the other side. Promoting salient visual tokens cut quality loss by up to 56%. At thresholds 0.006 and 0.002 the undamped policy cost +35.8% / +67.3% / +102.4% energy at 1× / 10× / 20× move cost, for −44.6% quality loss at every cost.</li>
+        <li>Move cost shifts only the energy side. It does not change what promotion buys.</li>
+      </ul>
+    </article>
+
+    <article class="step neu">
+      <div class="step-head"><span class="eyebrow">M4 · step 3</span><span class="badge neu">● diagnosed</span></div>
+      <h3>Comparison bars and tier timeline</h3>
+      <ul>
+        <li>The timeline exposed a burst of 21 demotions at step 0. Text entries start HOT with an EMA of zero, which is below the demote threshold, so all 20 prefill text tokens plus one more were demoted at once, each paying 10× move cost.</li>
+        <li>Steps 4 to 11 held about 50 promotions as salient visual tokens crossed the threshold. That burst was useful work: it took the WARM attention share from about 97% to about 36%.</li>
+        <li>After that, a trickle of 0 to 3 moves per step, mostly boundary entries.</li>
+      </ul>
+    </article>
+
+    <article class="step neu">
+      <div class="step-head"><span class="eyebrow">M4b</span><span class="badge neu">● partial fix</span></div>
+      <h3>Damping the dynamic policy</h3>
+      <ul>
+        <li>Added <code>warmup_steps</code>, <code>min_dwell_steps</code> and <code>damp_promotions</code>, all off by default. Swept 6 warmups × 6 dwells × both promotion modes, averaged over 5 trace seeds.</li>
+        <li><b>Warmup 2 beats undamped on both axes:</b> energy +55.8% against +64.8%, quality loss −49.3% against −46.1%, reconfiguration share of energy 13.0% against 19.1%, tier moves 85 against 131. It became the new default.</li>
+        <li><b>Post-hoc choice.</b> Before the sweep I fixed the rule "lowest energy subject to at least 20% quality gain". It drifted to the edge of the quality budget and picked dwell 20, which gives away 11 points of quality gain to do less. After seeing that I switched to quality-gain-per-energy. The new rule favoured warmup 2, and I adopted it. This was decided after the results.</li>
+        <li><b>The burst only moved.</b> Warmup 2 shifts the 20 text demotions from step 0 to step 1. At a decay of 0.9 the EMA needs about 20 steps to converge, so text still looks unimportant after two updates. In this trace those demotions are mostly correct, just early.</li>
+        <li>Dwell 20 removes steady-state churn but batches every move into one burst at step 19. For the first 20 steps 70% to 97% of attention is served from WARM.</li>
+        <li><b>Bias-corrected EMA was neutral.</b> It gave +78.8% energy and −61.1% quality loss (median over a grid) against +55.9% and −49.3% for the raw EMA. That is a different operating point, not a better frontier, and the thresholds were calibrated on the raw EMA. Left off by default.</li>
+        <li>The remaining +55% energy is mostly the inherent cost of reading promoted tokens from HOT. Move cost is only 13% of dynamic energy.</li>
+        <li>Thresholds matter more than damping. The best efficiency in the threshold sweep is promote 0.008 with demote 0.001 (+35% energy for −38% quality loss). We did not adopt it because the right trade depends on how energy and quality are weighed.</li>
+      </ul>
+    </article>
+
+    <article class="step neg">
+      <div class="step-head"><span class="eyebrow">M5</span><span class="badge neg">▼ did not replicate</span></div>
+      <h3>Real attention traces from SmolVLM-256M</h3>
+      <ul>
+        <li>Ran the model on three locally generated images (a bar chart, a scene, a boxed word on noise), greedy-decoded 64 tokens, and recorded each step's attention averaged over 30 layers and 9 heads. The model answered all three correctly, so it was using the image.</li>
+        <li>The premise holds. The top 8% of visual tokens carry 61% to 70% of visual attention, and 74% to 83% of that set is the same at the first and last step.</li>
+        <li>The magnitude does not. Visual tokens get 5% to 7% of attention. About 35% goes to the attention sink at position 0 and about 36% to generated tokens. The synthetic trace had 68% of attention served from WARM under static modality; the real traces have about 6%.</li>
+        <li>Thresholds calibrated on synthetic data never promote anything on real data: uniform attention is about 0.0011 and the 99th-percentile visual EMA is about 0.0008, below the 0.006 promote threshold. With them, dynamic only demotes text: −23% to −27% energy and +37% to +42% quality loss. Thresholds were re-expressed as multiples of uniform attention.</li>
+        <li><b>Protocol fixed before looking:</b> choose thresholds on chart and scene (lowest energy with quality loss no worse than static), test on the held-out noise_label trace. Chosen: promote 2.0× and demote 0.4× uniform. Training mean: −6.6% energy, −2.5% quality loss.</li>
+        <li><b>Held-out result: −14.4% energy but +11.9% quality loss (0.0027 to 0.0031). The no-worse-quality criterion failed.</b> Per trace the training results were also mixed: chart +5.1%, scene −10.0%.</li>
+        <li>The stakes are small. Static modality's quality loss is about 0.003 against a worst case of 0.05, and flat to static is −88% to −90% energy. Dynamic moves energy by about ±10% around that.</li>
+        <li>A per-layer check (chart trace, 16 steps) shows the layer average hides structure. Visual attention ranges from about 3% to 39% by layer, up to 70% in one head of layer 0, and the sink is near zero in layers 0, 1 and 11 and 40% to 78% in layers 12 to 29.</li>
+      </ul>
+    </article>
+
+    <article class="step neu">
+      <div class="step-head"><span class="eyebrow">M6</span><span class="badge neu">● conditional</span></div>
+      <h3>Per-layer entries, sparse reads and a measured INT4 error</h3>
+      <ul>
+        <li>Added one entry per token and layer, a sparse-read mode (top 10% by live importance plus new entries), and a measurement of INT4 error on SmolVLM's KV cache. Same selection protocol as M5, 408 simulations.</li>
+        <li>Per-layer entries with dense reads gave the first real-trace dynamic win: about −20% energy on all three traces, held-out quality +0.8%. That narrowly misses the strict no-worse rule, and we report it as a miss.</li>
+        <li>With sparse reads the win disappears (+3.7% to +7.5% energy). With layer-averaged entries and sparse reads the policy never moves anything.</li>
+        <li>Sparse reads cut the flat-over-static energy ratio from about 9.3× to 1.6× to 2.0×, so tiering is worth much less when a system skips low-attention tokens.</li>
+        <li>Measured INT4 error is about 0.09, against 0.05 assumed. Ratios are unaffected; absolute quality values scale by about 1.8×.</li>
+        <li>The likely mechanism is demotion of text entries in layers that ignore them. This is an inference from totals, not an instrumented result.</li>
+      </ul>
+    </article>
+  </div>
+
+  <h3>Ledger of negative and neutral results</h3>
+  <ul class="ledger">
+    <li><span class="badge neg">▼</span><span>The first sweep's headline result (87 of 174 configurations beating static) was an artifact of a cost model with no quality term.</span></li>
+    <li><span class="badge neg">▼</span><span>The 24 configurations that beat static on both axes in M4 did so by demoting text. They are not evidence for dynamic promotion.</span></li>
+    <li><span class="badge neu">●</span><span>The damping default was chosen after the results, by a different rule than the one fixed in advance.</span></li>
+    <li><span class="badge neu">●</span><span>Warmup 2 moved the step-0 demotion burst to step 1 instead of removing it.</span></li>
+    <li><span class="badge neu">●</span><span>A bias-corrected EMA gave a different operating point, not a better one.</span></li>
+    <li><span class="badge neg">▼</span><span>On real traces the synthetic trade-off did not replicate, and the held-out check failed.</span></li>
+    <li><span class="badge neg">▼</span><span>With sparse reads the per-layer dynamic win disappears or reverses, and layer-averaged entries leave the policy nothing to do.</span></li>
+    <li><span class="badge neu">●</span><span>The per-layer dense result misses the strict no-worse-quality rule by +0.8% on the held-out trace.</span></li>
+    <li><span class="badge neu">●</span><span>The mechanism behind the per-layer gain is inferred from totals, not instrumented.</span></li>
+    <li><span class="badge neg">▼</span><span>The assumed INT4 error was about half the measured value. Ratios survive, absolute quality numbers do not.</span></li>
+    <li><span class="badge neu">●</span><span>One process slip: a test with a missing import was committed, then fixed in the next commit (748ec98).</span></li>
+  </ul>
+  <div class="prose"><p>A note on which numbers come from where. The narrative figures for M4 step 2 (−44.6%, +67.3%) come from the undamped policy. The CSVs and charts below were regenerated with the warmup 2 default, so the same thresholds now read +55.4% energy and −48.8% quality loss at 10× move cost.</p></div>
+</section>
+
+<section id="evidence">
+  <h2>5 · Evidence</h2>
+  <div class="prose"><p>Charts are drawn from the CSVs in <code>results/</code>, embedded in this page. Hover or tap a mark for exact values. Each chart has a table view underneath. Policy colors are the same in every chart. Colors are paired with direct labels or a legend, because two of the four light-mode colors are below 3:1 contrast on white.</p></div>
+
+  <h3>Synthetic trace</h3>
+  <figure class="chart">
+    <div class="fig-title">Figure 4 · Policies at the default config, 10× move cost</div>
+    <div class="legend" id="lg-pol"></div>
+    <div class="panels" id="f-policies"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-policies"></div></details>
+    <figcaption><b>Dynamic sits between static and flat on quality, and above static on energy.</b> Flat is 8.5× the energy of static, so on a linear axis the cheaper policies are short bars. All-WARM is reconfiguration-free and is shown for reference only. Dynamic is the current default (warmup 2, seed 0).</figcaption>
+  </figure>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 5 · Energy against quality loss, every threshold pair</div>
+    <div class="legend" id="lg-par"></div>
+    <div class="seg" role="group" aria-label="Move cost multiplier" id="par-seg"></div>
+    <div id="f-pareto"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-pareto"></div></details>
+    <figcaption><b>Lower left is better.</b> Each green dot is one promote and demote threshold pair at the selected move cost (29 pairs). The y axis is energy as a multiple of static modality, on a log scale. The cloud runs from near all-WARM toward flat, and the points left of static buy quality with energy. Changing move cost slides the cloud up and leaves it in place horizontally, because move cost only adds energy.</figcaption>
+  </figure>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 6 · Energy overhead against move cost, thresholds 0.006 / 0.002</div>
+    <div id="f-cost"></div>
+    <figcaption><b>Quality gain is flat at −48.8% while energy overhead climbs with move cost.</b> At 20× the +75.8% energy is a much worse deal than at 1×.</figcaption>
+  </figure>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 7 · Damping sweep, 72 variants, mean of 5 seeds</div>
+    <div class="legend" id="lg-damp"></div>
+    <div id="f-damp"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-damp"></div></details>
+    <figcaption><b>Lower left is better, and warmup 2 sits below and left of the undamped policy.</b> Dwell 20 reaches lower energy only by giving up quality gain. Both axes are percent change against static modality at the same seed.</figcaption>
+  </figure>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 8 · Dynamic policy over decode steps (warmup 2, seed 0)</div>
+    <div class="legend" id="lg-ts"></div>
+    <div id="f-ts"></div>
+    <figcaption><b>The WARM share falls from 97% to 34% by step 12, then drifts down to 23%.</b> The 20 demotions at step 1 are the cold-start burst that warmup 2 shifted from step 0. Promotions cluster in steps 4 to 13 as salient visual tokens cross the threshold, with a thin trickle of demotions late.</figcaption>
+  </figure>
+
+  <h3>Real traces</h3>
+  <figure class="chart">
+    <div class="fig-title">Figure 9 · Where the attention goes, SmolVLM-256M</div>
+    <div class="legend" id="lg-comp"></div>
+    <div id="f-comp"></div>
+    <figcaption><b>Visual tokens are 95% of entries and about 6% of attention.</b> The remainder is other prompt text. Averaged over all layers and heads, over 64 decode steps.</figcaption>
+  </figure>
+
+  <div class="tbl wide"><table>
+    <thead><tr><th>Quantity</th><th class="n">chart</th><th class="n">scene</th><th class="n">noise_label</th></tr></thead>
+    <tbody>
+      <tr><td>Attention mass on visual tokens</td><td class="n">6%</td><td class="n">7%</td><td class="n">5%</td></tr>
+      <tr><td>Attention sink (position 0)</td><td class="n">35%</td><td class="n">34%</td><td class="n">34%</td></tr>
+      <tr><td>Mass on generated tokens</td><td class="n">36%</td><td class="n">37%</td><td class="n">37%</td></tr>
+      <tr><td>Top 8% of visual tokens, share of visual mass</td><td class="n">63%</td><td class="n">70%</td><td class="n">61%</td></tr>
+      <tr><td>Top-8% set overlap, first against last step</td><td class="n">74%</td><td class="n">83%</td><td class="n">77%</td></tr>
+      <tr><td>Median visual token EMA against uniform</td><td class="n">0.02×</td><td class="n">0.02×</td><td class="n">0.02×</td></tr>
+    </tbody>
+  </table></div>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 10 · Attention mass served from WARM under static modality</div>
+    <div id="f-warm"></div>
+    <figcaption><b>The synthetic trace overstated WARM's share by about ten times.</b> This gap is why the synthetic quality results do not transfer. It is the central result of M5.</figcaption>
+  </figure>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 11 · Dynamic policy against static modality on real traces</div>
+    <div class="legend" id="lg-real"></div>
+    <div class="panels" id="f-real"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-real"></div></details>
+    <figcaption><b>Filled bars use thresholds chosen on chart and scene. Outlined bars use the synthetic defaults.</b> Negative is better on both axes. On the held-out trace (noise_label) the chosen thresholds save 14.4% energy and lose 11.9% on quality. The synthetic defaults save more energy and lose far more quality, on every trace.</figcaption>
+  </figure>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 12 · Visual attention by layer, chart trace, 16 steps</div>
+    <div class="legend" id="lg-layer"></div>
+    <div id="f-layer-v"></div>
+    <div id="f-layer-s" style="margin-top:14px"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-layer"></div></details>
+    <figcaption><b>The layer average hides a lot.</b> Visual mass runs from 3% to 39% by layer, and the strongest head in layer 0 puts 70% on visual tokens. The sink is near zero in the first two layers and takes 40% to 78% in the later ones. These per-layer values come from a one-off analysis of the chart trace; they are not saved as a script yet.</figcaption>
+  </figure>
+</section>
+
+<section id="m6">
+  <h2>6 · M6: per-layer entries, sparse reads, measured INT4 error</h2>
+  <div class="prose">
+    <p>M5 left three open questions. Does averaging over layers hide a placement win? Does the dynamic policy still matter if a system reads only the entries that matter? And how wrong is the assumed INT4 error? M6 answers each. The protocol is M5's, fixed in advance: thresholds in multiples of uniform attention, chosen on chart and scene as the lowest energy with mean quality no worse than static, then tested on the held-out noise_label trace. The run is 408 simulations (<code>results/m6_sweep.csv</code>).</p>
+  </div>
+
+  <h3>What we built</h3>
+  <figure class="diagram">
+    <div class="scroll-x">
+    <svg id="d-m6" viewBox="0 0 900 340" width="900" height="340" style="min-width:760px" role="img" aria-label="Left: per-layer entry layout, one entry per token and layer, each with its own tier. Right: sparse access, where only the top 10 percent of entries by live importance are read and charged, and the tail is skipped."></svg>
+    </div>
+    <figcaption><b>Figure 13.</b> Left: one KV entry per token and layer, so the same token can be HOT in one layer and WARM in another (cell colors are illustrative). Right: sparse reads. Each step ranks entries by live importance and reads the top 10% plus entries created in the last step. The tail costs no energy, and its attention mass is reported as skipped.</figcaption>
+  </figure>
+  <div class="prose">
+    <ul>
+      <li><b>Sparse access.</b> Step 0 is dense. After that only the top 10% of active entries by live importance EMA, plus entries created in the last step, are read. Skipped attention mass is reported and costs no energy. It does not depend on placement (tested).</li>
+      <li><b>Assumption:</b> the importance estimate sees the true attention weights at zero cost. That is an upper bound on what a real approximate scorer could do.</li>
+      <li><b>Per-layer entries.</b> One entry per token and layer. Each layer's attention is renormalised and divided by the number of layers, so a step's mass still sums to 1. Entry size matches a single-entry token, so absolute energies are about 30× the layer-averaged ones. Compare ratios only.</li>
+      <li>Quality is linear in attention weights, so static policies score identically in both views (0.0031 on chart). Per-layer entries change only what the dynamic policy can do.</li>
+    </ul>
+  </div>
+
+  <h3>Results</h3>
+  <div class="tbl wide"><table>
+    <thead><tr><th>Mode</th><th class="n">flat ÷ static energy</th><th class="n">skipped mass</th><th class="n">chosen promote / demote</th><th class="n">held-out energy vs static</th><th class="n">held-out quality vs static</th></tr></thead>
+    <tbody>
+      <tr><td>layer-averaged, dense (the M5 setup)</td><td class="n">9.3×</td><td class="n">0%</td><td class="n">2.0× / 0.4×</td><td class="n">−14.4%</td><td class="n">+11.9%</td></tr>
+      <tr><td>layer-averaged, sparse 10%</td><td class="n">1.6×</td><td class="n">3.2% to 3.6%</td><td class="n">8.0× / 0.02×</td><td class="n">+0.2% (no moves)</td><td class="n">0%</td></tr>
+      <tr><td>per-layer, dense</td><td class="n">9.3×</td><td class="n">0%</td><td class="n">4.0× / 0.4×</td><td class="n">−20.0%</td><td class="n">+0.8%</td></tr>
+      <tr><td>per-layer, sparse 10%</td><td class="n">1.9× to 2.0×</td><td class="n">2.1% to 2.3%</td><td class="n">8.0× / 0.2×</td><td class="n">+3.7%</td><td class="n">−0.2%</td></tr>
+    </tbody>
+  </table></div>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 14 · Four modes on the held-out trace (noise_label)</div>
+    <div class="legend"><span><i style="background:var(--seg)"></i>substrate (no policy)</span><span><i style="background:var(--s3)"></i>dynamic policy vs static</span></div>
+    <div class="panels" id="f-m6modes"></div>
+    <details class="table-view"><summary>Table view, all 12 runs</summary><div class="tv-wrap" id="tv-m6"></div></details>
+    <figcaption><b>Sparse reads shrink what tiering is worth. Per-layer entries give the dynamic policy something to do.</b> In the left panel, 10% sparse reads cut the flat-over-static energy ratio from 9.3× to under 2×. In the middle panel only the two dense modes save energy, −14.4% layer-averaged and −20.0% per-layer. In the right panel, the held-out quality change is within about one percent in the three new modes, against +11.9% for the M5 setup. Here "avg" means layer-averaged.</figcaption>
+  </figure>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 15 · Per-layer entries on each trace, dynamic against static</div>
+    <div class="legend"><span><i style="background:var(--s3)"></i>per-layer, dense</span><span style="color:var(--s3)"><i class="ring"></i>per-layer, sparse 10%</span></div>
+    <div class="panels" id="f-m6traces"></div>
+    <figcaption><b>Dense reads save about 20% energy on all three traces.</b> Quality moves −2.0%, −10.3% and +0.8% on chart, scene and noise_label, and each session makes between 1,163 and 1,423 tier moves. With sparse reads the energy result turns into +6.5%, +7.5% and +3.7%, because the HOT text entries that dynamic demotes are rarely read, while about a thousand moves still pay the move cost. Negative is better on both axes.</figcaption>
+  </figure>
+
+  <div class="prose">
+    <ul>
+      <li><b>Layer-averaged and sparse:</b> the dynamic policy has nothing to do. The chosen thresholds never trigger (0 to 1 moves per session), so static modality is already as good as it gets.</li>
+      <li><b>Per-layer and dense:</b> the first dynamic win on real traces, about −20% energy with quality roughly neutral.</li>
+      <li><b>Per-layer and sparse:</b> energy +3.7% to +7.5%, quality −0.2% to −7.8%. The benefit disappears or reverses at the default 10× move cost.</li>
+      <li>Exploratory and unsaved (an ad-hoc run on the chart trace, layer-averaged): flat ÷ static energy was 5.4× at 50% top-k, 2.5× at 20%, 1.6× at 10% and 1.4× at 5%.</li>
+    </ul>
+  </div>
+
+  <div class="flag" style="max-width:78ch"><b>Strict rule, marginal miss.</b> On the held-out trace the per-layer dense configuration saves 20.0% energy and loses 0.8% on quality against static. The rule fixed in advance was quality no worse than static, so this misses by 0.8%. We report it as a miss and do not round it to zero. Quality was −2.0% and −10.3% on the two training traces.</div>
+
+  <div class="pending" style="border-style:solid">
+    <p style="margin:0"><b>Mechanism: arithmetic inference, not instrumented.</b> In the static per-layer baseline the roughly 1.3k HOT text entries (44 tokens × 30 layers) cost about 170M of about 380M pJ. The dynamic policy saves about 78M pJ, roughly half of that. The WARM share of attention barely moves (6.2% to 6.1%). From these totals, the saving comes mostly from demoting text entries in layers where text is unimportant, plus a few promotions of visual entries in layers that attend to them. It does not come mainly from rescuing salient visual tokens. This is the same text-demotion channel seen on the synthetic trace. We did not break the saving down per entry to confirm it.</p>
+  </div>
+
+  <h3>Measured INT4 error</h3>
+  <div class="prose">
+    <p>We quantized SmolVLM's prefill K and V per token to INT4 (min-max) and measured relative L2 error, over 30 layers and 3 images (<code>results/int4_error.csv</code>, 360 rows). At group size 32 the error is 0.102 for K and 0.081 for V. At group size 64 it is 0.134 and 0.094. Visual and text tokens agree within about 1%.</p>
+    <p><b>The assumed 0.05 was about half the measured value of roughly 0.09.</b> We left the config at 0.05. Quality loss is the sum of attention weight times error, so it is linear in the error and the same factor applies to every policy. Every ratio against static is unchanged, and so are the threshold choices, since the selection rule compares ratios. Only absolute quality values scale, by about 1.8×. Read any absolute quality number in this report that way. Keeping 0.05 means the committed results still reproduce.</p>
+    <p>Two limits. We did not compute a per-channel variant for K, because a guard skipped it for token counts that are not a multiple of 64. And relative L2 error stands in for quality loss here, the same proxy the rest of the report uses.</p>
+  </div>
+  <figure class="chart">
+    <div class="fig-title">Figure 16 · Measured INT4 error by layer against the assumed 0.05</div>
+    <div id="f-int4"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-int4"></div></details>
+    <figcaption><b>Every layer sits near 0.09, well above the assumed 0.05.</b> Values are relative L2 error at group size 32, averaged over three images and over visual and text tokens. K and V are shown separately.</figcaption>
+  </figure>
+</section>
+
+<section id="decisions">
+  <h2>7 · Decision log</h2>
+  <div class="prose"><p>The user told us to automate every decision, so most entries are Claude's. The one decision the user made directly is marked.</p></div>
+  <div class="tbl wide"><table>
+    <thead><tr><th>Decision</th><th>Why</th><th>Evidence</th><th>By</th></tr></thead>
+    <tbody>
+      <tr><td>Add a quality penalty for WARM reads</td><td>Energy-only comparison was degenerate: all-WARM won</td><td>All-WARM −78.6% energy, +2.6% latency vs static (M4 step 1)</td><td>User, from two options</td></tr>
+      <tr><td>Set WARM quant error to 0.05</td><td>Needed a number to make the penalty work</td><td>None at the time. Flagged as an assumption, later measured at about 0.09 (M6)</td><td>Claude</td></tr>
+      <tr><td>Report quality as an axis, not a scalar cost</td><td>Weights between energy and quality are a judgment call</td><td>Code design; policies do not see quality</td><td>Claude</td></tr>
+      <tr><td>Default to warmup 2, dwell 0</td><td>Dominates undamped on both axes, best gain per energy</td><td>Damping sweep, 5 seeds (Figure 7)</td><td>Claude, post hoc</td></tr>
+      <tr><td>Reject dwell 20 as default</td><td>Gives away 11 points of quality gain, batches moves at step 19</td><td>Damping sweep, timeline</td><td>Claude</td></tr>
+      <tr><td>Leave bias-corrected EMA off</td><td>Different operating point, thresholds not recalibrated</td><td>Median +78.8% energy, −61.1% quality vs +55.9%, −49.3%</td><td>Claude</td></tr>
+      <tr><td>Keep <code>damp_promotions</code> true</td><td>False gave identical results at dwell 0 and no gain elsewhere</td><td>Damping sweep</td><td>Claude</td></tr>
+      <tr><td>Do not adopt promote 0.008 / demote 0.001</td><td>Best efficiency, but efficiency is a heuristic</td><td>+35% energy, −38% quality loss</td><td>Claude</td></tr>
+      <tr><td>Use SmolVLM-256M and local images</td><td>Small enough for the laptop (M1 Pro, 16 GB RAM, 33 GB free disk); no image downloads</td><td>Session environment check</td><td>Claude</td></tr>
+      <tr><td>Install torch and transformers as an optional <code>vlm</code> extra</td><td>Keeps simulator and policies free of the deep-learning stack</td><td><code>pyproject.toml</code>, torch-free <code>real_trace.py</code></td><td>Claude</td></tr>
+      <tr><td>Last prompt token is decode step 0's query</td><td>Matches the simulator's prefill plus decode-entry model exactly</td><td>3 tests on the adapter</td><td>Claude</td></tr>
+      <tr><td>Express thresholds as multiples of uniform attention on real traces</td><td>Synthetic thresholds never fire on about 900 entries</td><td>Uniform ≈ 0.0011; p99 visual EMA ≈ 0.0008</td><td>Claude</td></tr>
+      <tr><td>Fix train and test split before running</td><td>Avoid tuning thresholds to the trace they are scored on</td><td>Train chart and scene, test noise_label</td><td>Claude</td></tr>
+      <tr><td>Report the held-out failure as a failure</td><td>The criterion was set in advance and it was not met</td><td>+11.9% quality loss on noise_label</td><td>Claude</td></tr>
+      <tr><td>Sparse reads: top 10% by live EMA plus entries from the last step, step 0 dense</td><td>A simple model of a system that skips low-attention tokens</td><td>Skipped mass 2.1% to 3.6%, placement-independent (tested)</td><td>Claude</td></tr>
+      <tr><td>Give the importance estimate true weights at zero cost under sparse reads</td><td>Isolates placement from scorer quality, at the price of an upper bound</td><td>Stated as an assumption</td><td>Claude</td></tr>
+      <tr><td>One entry per token and layer, attention divided by layer count</td><td>Keeps each step's mass at 1 so quality stays comparable</td><td>Static quality identical in both views (0.0031 on chart)</td><td>Claude</td></tr>
+      <tr><td>Reuse the M5 selection protocol for M6</td><td>Keeps results comparable and avoids new degrees of freedom</td><td>Same train and test traces and rule</td><td>Claude</td></tr>
+      <tr><td>Keep quant error at 0.05 in the config despite measuring 0.09</td><td>Ratios are unaffected and committed results stay reproducible</td><td>Quality is linear in the error; read absolute values × about 1.8</td><td>Claude</td></tr>
+      <tr><td>Report the +0.8% held-out quality as a marginal miss</td><td>The rule was quality no worse than static</td><td><code>results/m6_results.csv</code></td><td>Claude</td></tr>
+      <tr><td>Label the mechanism as inference</td><td>The 170M and 78M pJ figures are arithmetic from totals, not instrumented</td><td><code>NOTES.md</code>, M6 observations</td><td>Claude</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="limits">
+  <h2>8 · Limits and next steps</h2>
+  <h3>Limits</h3>
+  <div class="prose">
+    <ul>
+      <li>The real-trace evidence is thin: one 256M model, three generated images, 64 decode steps, selection on two traces and one held-out trace. Natural photos, documents and larger models are untested.</li>
+      <li>The synthetic M4 conclusions describe the synthetic trace. They should not be read as properties of vision-language models.</li>
+      <li>The config still carries the assumed 0.05 INT4 error. Measured error is about 0.09, so absolute quality values are about 1.8× too small. Ratios against static are unaffected. The per-channel K variant was not measured.</li>
+      <li>Latency is serialized total work, not wall-clock time.</li>
+      <li>Per-layer entries average over heads within a layer. Per-head structure is still hidden.</li>
+      <li>Sparse reads assume a perfect importance estimate at zero cost, which is an upper bound for any real scorer. The 50%, 20% and 5% top-k numbers come from an unsaved ad-hoc run.</li>
+      <li>The per-layer dense gain needs about a thousand tier moves per session, and it narrowly misses the strict quality rule.</li>
+      <li>The mechanism behind the per-layer gain is inferred from totals, not instrumented.</li>
+      <li>No quality-aware policy exists yet. The policy never sees quality.</li>
+      <li>The planned oracle comparison against ground-truth top-k attended tokens is not done.</li>
+    </ul>
+  </div>
+  <h3>Next steps</h3>
+  <div class="prose">
+    <ul>
+      <li>A layer-aware static prior (modality × layer) as a stronger baseline than static modality. The per-layer dynamic win looks like a layer effect, so this baseline may capture it without any moves.</li>
+      <li>Per-head entries.</li>
+      <li>A real approximate importance estimator for sparse reads, in place of true weights.</li>
+      <li>Sweep move cost and top-k fraction on real traces.</li>
+      <li>Natural images, documents and a larger vision-language model.</li>
+      <li>The oracle top-k comparison from the M5 plan, and a quality-aware promotion rule.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="conclusion">
+  <h2>9 · Conclusion</h2>
+  <div class="prose">
+    <p>A fixed split by modality does most of the work. On real traces it cuts energy by about 90% against keeping everything HOT, for a quality loss near 0.003, and sparse reads shrink the remaining gap between flat and static from about 9.3× to under 2×.</p>
+    <p>The dynamic policy's synthetic trade-off (about −49% quality loss for about +55% energy) did not replicate. The synthetic trace sent about 68% of attention to WARM, and real traces send about 6%. On real traces its value is conditional. With per-layer entries and dense reads it saves about 20% energy at roughly neutral quality, narrowly missing the strict rule, and likely by demoting text entries rather than rescuing visual ones. With sparse reads that benefit vanishes, and it needs about a thousand moves per session.</p>
+    <p>The INT4 error we assumed was about half the measured value. That does not change any ratio. The next experiment worth running is a layer-aware static prior, since it would show whether the dynamic policy's remaining gain needs dynamics at all.</p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="eyebrow">Provenance</div>
+  <ul>
+    <li>Narrative and numbers: <code>NOTES.md</code>. Chart data: <code>results/milestone4_comparison.csv</code>, <code>sensitivity_references.csv</code>, <code>sensitivity_sweep.csv</code>, <code>damping_sweep.csv</code>, <code>dynamic_hybrid_timeseries.csv</code>, <code>real_trace_results.csv</code>, <code>m6_results.csv</code>, <code>int4_error.csv</code>. The M6 tables are from <code>NOTES.md</code>.</li>
+    <li>Per-layer values in Figure 12 come from a one-off analysis run in the working session (chart trace, 16 decode steps). <code>NOTES.md</code> summarizes only their range.</li>
+    <li>The page is generated by <code>report/build.py</code> from <code>report/template.html</code>.</li>
+  </ul>
+</footer>
+</div>
+
+<div id="tip" hidden></div>
+
+<script>
+const D = {"policies":[{"policy":"flat","energy":72594080.0,"latency":797721.599999998,"quality":0.0,"warm":0.0,"promos":0,"demos":0},{"policy":"static_modality","energy":8552479.999999907,"latency":1066521.5999999873,"quality":0.03397708579258439,"warm":67.95417158516877,"promos":0,"demos":0},{"policy":"dynamic_hybrid","energy":13291474.799999954,"latency":1073131.1999999871,"quality":0.017409329926510727,"warm":34.81865985302145,"promos":52,"demos":33},{"policy":"all_warm","energy":1828112.0000000172,"latency":1094745.5999999845,"quality":0.05,"warm":100.0,"promos":0,"demos":0}],"sweep":[[0.004,0.0005,0.0,52.721,-1.774,0.01481,-56.418,80,29.62],[0.004,0.0005,1.0,54.641,-1.605,0.01481,-56.418,80,29.62],[0.004,0.0005,2.0,56.561,-1.436,0.01481,-56.418,80,29.62],[0.004,0.0005,5.0,62.323,-0.928,0.01481,-56.418,80,29.62],[0.004,0.0005,10.0,71.925,-0.082,0.01481,-56.418,80,29.62],[0.004,0.0005,20.0,91.128,1.61,0.01481,-56.418,80,29.62],[0.004,0.001,0.0,52.697,-1.774,0.01481,-56.416,82,29.62],[0.004,0.001,1.0,54.666,-1.6,0.01481,-56.416,82,29.62],[0.004,0.001,2.0,56.634,-1.427,0.01481,-56.416,82,29.62],[0.004,0.001,5.0,62.539,-0.906,0.01481,-56.416,82,29.62],[0.004,0.001,10.0,72.381,-0.039,0.01481,-56.416,82,29.62],[0.004,0.001,20.0,92.065,1.695,0.01481,-56.416,82,29.62],[0.004,0.002,0.0,47.643,-1.604,0.01499,-55.897,101,29.97],[0.004,0.002,1.0,50.067,-1.39,0.01499,-55.897,101,29.97],[0.004,0.002,2.0,52.492,-1.176,0.01499,-55.897,101,29.97],[0.004,0.002,5.0,59.765,-0.535,0.01499,-55.897,101,29.97],[0.004,0.002,10.0,71.888,0.533,0.01499,-55.897,101,29.97],[0.004,0.002,20.0,96.132,2.669,0.01499,-55.897,101,29.97],[0.004,0.003,0.0,41.138,-1.385,0.01533,-54.882,110,30.66],[0.004,0.003,1.0,43.778,-1.152,0.01533,-54.882,110,30.66],[0.004,0.003,2.0,46.419,-0.919,0.01533,-54.882,110,30.66],[0.004,0.003,5.0,54.34,-0.221,0.01533,-54.882,110,30.66],[0.004,0.003,10.0,67.543,0.942,0.01533,-54.882,110,30.66],[0.004,0.003,20.0,93.948,3.269,0.01533,-54.882,110,30.66],[0.006,0.0005,0.0,36.855,-1.24,0.01734,-48.972,72,34.68],[0.006,0.0005,1.0,38.584,-1.088,0.01734,-48.972,72,34.68],[0.006,0.0005,2.0,40.312,-0.936,0.01734,-48.972,72,34.68],[0.006,0.0005,5.0,45.497,-0.479,0.01734,-48.972,72,34.68],[0.006,0.0005,10.0,54.139,0.283,0.01734,-48.972,72,34.68],[0.006,0.0005,20.0,71.422,1.806,0.01734,-48.972,72,34.68],[0.006,0.001,0.0,36.855,-1.24,0.01734,-48.972,72,34.68],[0.006,0.001,1.0,38.584,-1.088,0.01734,-48.972,72,34.68],[0.006,0.001,2.0,40.312,-0.936,0.01734,-48.972,72,34.68],[0.006,0.001,5.0,45.497,-0.479,0.01734,-48.972,72,34.68],[0.006,0.001,10.0,54.139,0.283,0.01734,-48.972,72,34.68],[0.006,0.001,20.0,71.422,1.806,0.01734,-48.972,72,34.68],[0.006,0.002,0.0,35.007,-1.178,0.01741,-48.762,85,34.82],[0.006,0.002,1.0,37.047,-0.998,0.01741,-48.762,85,34.82],[0.006,0.002,2.0,39.088,-0.819,0.01741,-48.762,85,34.82],[0.006,0.002,5.0,45.209,-0.279,0.01741,-48.762,85,34.82],[0.006,0.002,10.0,55.411,0.62,0.01741,-48.762,85,34.82],[0.006,0.002,20.0,75.815,2.418,0.01741,-48.762,85,34.82],[0.006,0.003,0.0,30.748,-1.035,0.01763,-48.104,94,35.27],[0.006,0.003,1.0,33.004,-0.836,0.01763,-48.104,94,35.27],[0.006,0.003,2.0,35.261,-0.637,0.01763,-48.104,94,35.27],[0.006,0.003,5.0,42.03,-0.041,0.01763,-48.104,94,35.27],[0.006,0.003,10.0,53.312,0.953,0.01763,-48.104,94,35.27],[0.006,0.003,20.0,75.877,2.942,0.01763,-48.104,94,35.27],[0.006,0.004,0.0,24.336,-0.819,0.0192,-43.492,183,38.4],[0.006,0.004,1.0,28.729,-0.432,0.0192,-43.492,183,38.4],[0.006,0.004,2.0,33.122,-0.045,0.0192,-43.492,183,38.4],[0.006,0.004,5.0,46.301,1.116,0.0192,-43.492,183,38.4],[0.006,0.004,10.0,68.265,3.052,0.0192,-43.492,183,38.4],[0.006,0.004,20.0,112.194,6.923,0.0192,-43.492,183,38.4],[0.008,0.0005,0.0,16.708,-0.562,0.02168,-36.184,65,43.37],[0.008,0.0005,1.0,18.268,-0.425,0.02168,-36.184,65,43.37],[0.008,0.0005,2.0,19.828,-0.287,0.02168,-36.184,65,43.37],[0.008,0.0005,5.0,24.509,0.125,0.02168,-36.184,65,43.37],[0.008,0.0005,10.0,32.311,0.813,0.02168,-36.184,65,43.37],[0.008,0.0005,20.0,47.914,2.188,0.02168,-36.184,65,43.37],[0.008,0.001,0.0,16.708,-0.562,0.02168,-36.184,65,43.37],[0.008,0.001,1.0,18.268,-0.425,0.02168,-36.184,65,43.37],[0.008,0.001,2.0,19.828,-0.287,0.02168,-36.184,65,43.37],[0.008,0.001,5.0,24.509,0.125,0.02168,-36.184,65,43.37],[0.008,0.001,10.0,32.311,0.813,0.02168,-36.184,65,43.37],[0.008,0.001,20.0,47.914,2.188,0.02168,-36.184,65,43.37],[0.008,0.002,0.0,16.45,-0.554,0.02169,-36.152,71,43.39],[0.008,0.002,1.0,18.155,-0.404,0.02169,-36.152,71,43.39],[0.008,0.002,2.0,19.859,-0.253,0.02169,-36.152,71,43.39],[0.008,0.002,5.0,24.972,0.197,0.02169,-36.152,71,43.39],[0.008,0.002,10.0,33.494,0.948,0.02169,-36.152,71,43.39],[0.008,0.002,20.0,50.537,2.45,0.02169,-36.152,71,43.39],[0.008,0.003,0.0,13.947,-0.469,0.02183,-35.763,80,43.65],[0.008,0.003,1.0,15.867,-0.3,0.02183,-35.763,80,43.65],[0.008,0.003,2.0,17.787,-0.131,0.02183,-35.763,80,43.65],[0.008,0.003,5.0,23.548,0.377,0.02183,-35.763,80,43.65],[0.008,0.003,10.0,33.15,1.223,0.02183,-35.763,80,43.65],[0.008,0.003,20.0,52.354,2.915,0.02183,-35.763,80,43.65],[0.008,0.004,0.0,7.137,-0.24,0.02422,-28.729,166,48.43],[0.008,0.004,1.0,11.122,0.111,0.02422,-28.729,166,48.43],[0.008,0.004,2.0,15.107,0.462,0.02422,-28.729,166,48.43],[0.008,0.004,5.0,27.061,1.515,0.02422,-28.729,166,48.43],[0.008,0.004,10.0,46.985,3.271,0.02422,-28.729,166,48.43],[0.008,0.004,20.0,86.833,6.783,0.02422,-28.729,166,48.43],[0.01,0.0005,0.0,-24.453,0.823,0.03322,-2.227,24,66.44],[0.01,0.0005,1.0,-23.877,0.874,0.03322,-2.227,24,66.44],[0.01,0.0005,2.0,-23.301,0.925,0.03322,-2.227,24,66.44],[0.01,0.0005,5.0,-21.573,1.077,0.03322,-2.227,24,66.44],[0.01,0.0005,10.0,-18.692,1.331,0.03322,-2.227,24,66.44],[0.01,0.0005,20.0,-12.931,1.838,0.03322,-2.227,24,66.44],[0.01,0.001,0.0,-24.453,0.823,0.03322,-2.227,24,66.44],[0.01,0.001,1.0,-23.877,0.874,0.03322,-2.227,24,66.44],[0.01,0.001,2.0,-23.301,0.925,0.03322,-2.227,24,66.44],[0.01,0.001,5.0,-21.573,1.077,0.03322,-2.227,24,66.44],[0.01,0.001,10.0,-18.692,1.331,0.03322,-2.227,24,66.44],[0.01,0.001,20.0,-12.931,1.838,0.03322,-2.227,24,66.44],[0.01,0.002,0.0,-24.477,0.824,0.03322,-2.224,27,66.44],[0.01,0.002,1.0,-23.829,0.881,0.03322,-2.224,27,66.44],[0.01,0.002,2.0,-23.18,0.938,0.03322,-2.224,27,66.44],[0.01,0.002,5.0,-21.236,1.109,0.03322,-2.224,27,66.44],[0.01,0.002,10.0,-17.995,1.395,0.03322,-2.224,27,66.44],[0.01,0.002,20.0,-11.514,1.966,0.03322,-2.224,27,66.44],[0.01,0.003,0.0,-26.208,0.882,0.03331,-1.954,36,66.63],[0.01,0.003,1.0,-25.344,0.958,0.03331,-1.954,36,66.63],[0.01,0.003,2.0,-24.48,1.034,0.03331,-1.954,36,66.63],[0.01,0.003,5.0,-21.887,1.263,0.03331,-1.954,36,66.63],[0.01,0.003,10.0,-17.567,1.644,0.03331,-1.954,36,66.63],[0.01,0.003,20.0,-8.925,2.405,0.03331,-1.954,36,66.63],[0.01,0.004,0.0,-35.147,1.183,0.03699,8.856,120,73.97],[0.01,0.004,1.0,-32.267,1.437,0.03699,8.856,120,73.97],[0.01,0.004,2.0,-29.386,1.691,0.03699,8.856,120,73.97],[0.01,0.004,5.0,-20.744,2.452,0.03699,8.856,120,73.97],[0.01,0.004,10.0,-6.341,3.721,0.03699,8.856,120,73.97],[0.01,0.004,20.0,22.464,6.26,0.03699,8.856,120,73.97],[0.014,0.0005,0.0,-27.776,0.935,0.03388,-0.289,21,67.76],[0.014,0.0005,1.0,-27.272,0.979,0.03388,-0.289,21,67.76],[0.014,0.0005,2.0,-26.768,1.024,0.03388,-0.289,21,67.76],[0.014,0.0005,5.0,-25.256,1.157,0.03388,-0.289,21,67.76],[0.014,0.0005,10.0,-22.735,1.379,0.03388,-0.289,21,67.76],[0.014,0.0005,20.0,-17.694,1.823,0.03388,-0.289,21,67.76],[0.014,0.001,0.0,-27.776,0.935,0.03388,-0.289,21,67.76],[0.014,0.001,1.0,-27.272,0.979,0.03388,-0.289,21,67.76],[0.014,0.001,2.0,-26.768,1.024,0.03388,-0.289,21,67.76],[0.014,0.001,5.0,-25.256,1.157,0.03388,-0.289,21,67.76],[0.014,0.001,10.0,-22.735,1.379,0.03388,-0.289,21,67.76],[0.014,0.001,20.0,-17.694,1.823,0.03388,-0.289,21,67.76],[0.014,0.002,0.0,-27.776,0.935,0.03388,-0.289,22,67.76],[0.014,0.002,1.0,-27.248,0.981,0.03388,-0.289,22,67.76],[0.014,0.002,2.0,-26.72,1.028,0.03388,-0.289,22,67.76],[0.014,0.002,5.0,-25.136,1.168,0.03388,-0.289,22,67.76],[0.014,0.002,10.0,-22.495,1.4,0.03388,-0.289,22,67.76],[0.014,0.002,20.0,-17.214,1.866,0.03388,-0.289,22,67.76],[0.014,0.003,0.0,-28.993,0.976,0.03394,-0.098,31,67.89],[0.014,0.003,1.0,-28.249,1.041,0.03394,-0.098,31,67.89],[0.014,0.003,2.0,-27.505,1.107,0.03394,-0.098,31,67.89],[0.014,0.003,5.0,-25.272,1.304,0.03394,-0.098,31,67.89],[0.014,0.003,10.0,-21.551,1.632,0.03394,-0.098,31,67.89],[0.014,0.003,20.0,-14.11,2.287,0.03394,-0.098,31,67.89],[0.014,0.004,0.0,-59.039,1.987,0.04272,25.723,66,85.43],[0.014,0.004,1.0,-57.454,2.127,0.04272,25.723,66,85.43],[0.014,0.004,2.0,-55.87,2.266,0.04272,25.723,66,85.43],[0.014,0.004,5.0,-51.117,2.685,0.04272,25.723,66,85.43],[0.014,0.004,10.0,-43.196,3.383,0.04272,25.723,66,85.43],[0.014,0.004,20.0,-27.353,4.779,0.04272,25.723,66,85.43],[0.02,0.0005,0.0,-29.016,0.977,0.0344,1.257,20,68.81],[0.02,0.0005,1.0,-28.536,1.019,0.0344,1.257,20,68.81],[0.02,0.0005,2.0,-28.056,1.061,0.0344,1.257,20,68.81],[0.02,0.0005,5.0,-26.616,1.188,0.0344,1.257,20,68.81],[0.02,0.0005,10.0,-24.215,1.4,0.0344,1.257,20,68.81],[0.02,0.0005,20.0,-19.414,1.823,0.0344,1.257,20,68.81],[0.02,0.001,0.0,-29.016,0.977,0.0344,1.257,20,68.81],[0.02,0.001,1.0,-28.536,1.019,0.0344,1.257,20,68.81],[0.02,0.001,2.0,-28.056,1.061,0.0344,1.257,20,68.81],[0.02,0.001,5.0,-26.616,1.188,0.0344,1.257,20,68.81],[0.02,0.001,10.0,-24.215,1.4,0.0344,1.257,20,68.81],[0.02,0.001,20.0,-19.414,1.823,0.0344,1.257,20,68.81],[0.02,0.002,0.0,-29.016,0.977,0.0344,1.257,21,68.81],[0.02,0.002,1.0,-28.512,1.021,0.0344,1.257,21,68.81],[0.02,0.002,2.0,-28.008,1.065,0.0344,1.257,21,68.81],[0.02,0.002,5.0,-26.496,1.199,0.0344,1.257,21,68.81],[0.02,0.002,10.0,-23.975,1.421,0.0344,1.257,21,68.81],[0.02,0.002,20.0,-18.934,1.865,0.0344,1.257,21,68.81],[0.02,0.003,0.0,-30.233,1.018,0.03447,1.448,30,68.94],[0.02,0.003,1.0,-29.513,1.081,0.03447,1.448,30,68.94],[0.02,0.003,2.0,-28.793,1.145,0.03447,1.448,30,68.94],[0.02,0.003,5.0,-26.632,1.335,0.03447,1.448,30,68.94],[0.02,0.003,10.0,-23.032,1.652,0.03447,1.448,30,68.94],[0.02,0.003,20.0,-15.83,2.287,0.03447,1.448,30,68.94],[0.02,0.004,0.0,-60.279,2.029,0.04324,27.269,65,86.48],[0.02,0.004,1.0,-58.719,2.166,0.04324,27.269,65,86.48],[0.02,0.004,2.0,-57.158,2.304,0.04324,27.269,65,86.48],[0.02,0.004,5.0,-52.477,2.716,0.04324,27.269,65,86.48],[0.02,0.004,10.0,-44.676,3.404,0.04324,27.269,65,86.48],[0.02,0.004,20.0,-29.073,4.779,0.04324,27.269,65,86.48]],"damping":[{"dp":true,"warmup":0,"dwell":0,"e":64.777,"l":1.649,"q":-46.144,"share":19.07,"moves":131.0},{"dp":true,"warmup":0,"dwell":3,"e":56.251,"l":0.58,"q":-49.327,"share":13.0,"moves":84.6},{"dp":true,"warmup":0,"dwell":6,"e":57.444,"l":0.54,"q":-49.055,"share":12.9,"moves":84.6},{"dp":true,"warmup":0,"dwell":10,"e":58.146,"l":0.516,"q":-47.738,"share":12.84,"moves":84.6},{"dp":true,"warmup":0,"dwell":20,"e":49.466,"l":0.703,"q":-37.856,"share":13.01,"moves":81.0},{"dp":true,"warmup":0,"dwell":40,"e":25.731,"l":0.9,"q":-18.912,"share":11.53,"moves":60.4},{"dp":true,"warmup":2,"dwell":0,"e":55.783,"l":0.596,"q":-49.306,"share":13.03,"moves":84.6},{"dp":true,"warmup":2,"dwell":3,"e":56.251,"l":0.58,"q":-49.327,"share":13.0,"moves":84.6},{"dp":true,"warmup":2,"dwell":6,"e":57.444,"l":0.54,"q":-49.055,"share":12.9,"moves":84.6},{"dp":true,"warmup":2,"dwell":10,"e":58.146,"l":0.516,"q":-47.738,"share":12.84,"moves":84.6},{"dp":true,"warmup":2,"dwell":20,"e":49.466,"l":0.703,"q":-37.856,"share":13.01,"moves":81.0},{"dp":true,"warmup":2,"dwell":40,"e":25.731,"l":0.9,"q":-18.912,"share":11.53,"moves":60.4},{"dp":true,"warmup":4,"dwell":0,"e":56.709,"l":0.564,"q":-49.326,"share":12.96,"moves":84.6},{"dp":true,"warmup":4,"dwell":3,"e":56.709,"l":0.564,"q":-49.326,"share":12.96,"moves":84.6},{"dp":true,"warmup":4,"dwell":6,"e":57.444,"l":0.54,"q":-49.055,"share":12.9,"moves":84.6},{"dp":true,"warmup":4,"dwell":10,"e":58.146,"l":0.516,"q":-47.738,"share":12.84,"moves":84.6},{"dp":true,"warmup":4,"dwell":20,"e":49.466,"l":0.703,"q":-37.856,"share":13.01,"moves":81.0},{"dp":true,"warmup":4,"dwell":40,"e":25.731,"l":0.9,"q":-18.912,"share":11.53,"moves":60.4},{"dp":true,"warmup":8,"dwell":0,"e":57.893,"l":0.524,"q":-48.458,"share":12.86,"moves":84.6},{"dp":true,"warmup":8,"dwell":3,"e":57.893,"l":0.524,"q":-48.458,"share":12.86,"moves":84.6},{"dp":true,"warmup":8,"dwell":6,"e":57.893,"l":0.524,"q":-48.458,"share":12.86,"moves":84.6},{"dp":true,"warmup":8,"dwell":10,"e":58.146,"l":0.516,"q":-47.738,"share":12.84,"moves":84.6},{"dp":true,"warmup":8,"dwell":20,"e":49.466,"l":0.703,"q":-37.856,"share":13.01,"moves":81.0},{"dp":true,"warmup":8,"dwell":40,"e":25.731,"l":0.9,"q":-18.912,"share":11.53,"moves":60.4},{"dp":true,"warmup":12,"dwell":0,"e":57.589,"l":0.535,"q":-46.367,"share":12.89,"moves":84.6},{"dp":true,"warmup":12,"dwell":3,"e":57.589,"l":0.535,"q":-46.367,"share":12.89,"moves":84.6},{"dp":true,"warmup":12,"dwell":6,"e":57.589,"l":0.535,"q":-46.367,"share":12.89,"moves":84.6},{"dp":true,"warmup":12,"dwell":10,"e":57.589,"l":0.535,"q":-46.367,"share":12.89,"moves":84.6},{"dp":true,"warmup":12,"dwell":20,"e":49.466,"l":0.703,"q":-37.856,"share":13.01,"moves":81.0},{"dp":true,"warmup":12,"dwell":40,"e":25.731,"l":0.9,"q":-18.912,"share":11.53,"moves":60.4},{"dp":true,"warmup":16,"dwell":0,"e":53.119,"l":0.615,"q":-41.964,"share":12.89,"moves":82.2},{"dp":true,"warmup":16,"dwell":3,"e":53.119,"l":0.615,"q":-41.964,"share":12.89,"moves":82.2},{"dp":true,"warmup":16,"dwell":6,"e":53.119,"l":0.615,"q":-41.964,"share":12.89,"moves":82.2},{"dp":true,"warmup":16,"dwell":10,"e":53.119,"l":0.615,"q":-41.964,"share":12.89,"moves":82.2},{"dp":true,"warmup":16,"dwell":20,"e":49.466,"l":0.703,"q":-37.856,"share":13.01,"moves":81.0},{"dp":true,"warmup":16,"dwell":40,"e":25.731,"l":0.9,"q":-18.912,"share":11.53,"moves":60.4},{"dp":false,"warmup":0,"dwell":0,"e":64.777,"l":1.649,"q":-46.144,"share":19.07,"moves":131.0},{"dp":false,"warmup":0,"dwell":3,"e":56.251,"l":0.58,"q":-49.327,"share":13.0,"moves":84.6},{"dp":false,"warmup":0,"dwell":6,"e":57.655,"l":0.533,"q":-49.389,"share":12.88,"moves":84.6},{"dp":false,"warmup":0,"dwell":10,"e":59.527,"l":0.47,"q":-49.471,"share":12.73,"moves":84.6},{"dp":false,"warmup":0,"dwell":20,"e":64.207,"l":0.312,"q":-49.676,"share":12.37,"moves":84.6},{"dp":false,"warmup":0,"dwell":40,"e":73.604,"l":-0.004,"q":-50.088,"share":11.7,"moves":84.6},{"dp":false,"warmup":2,"dwell":0,"e":55.783,"l":0.596,"q":-49.306,"share":13.03,"moves":84.6},{"dp":false,"warmup":2,"dwell":3,"e":56.251,"l":0.58,"q":-49.327,"share":13.0,"moves":84.6},{"dp":false,"warmup":2,"dwell":6,"e":57.655,"l":0.533,"q":-49.389,"share":12.88,"moves":84.6},{"dp":false,"warmup":2,"dwell":10,"e":59.527,"l":0.47,"q":-49.471,"share":12.73,"moves":84.6},{"dp":false,"warmup":2,"dwell":20,"e":64.207,"l":0.312,"q":-49.676,"share":12.37,"moves":84.6},{"dp":false,"warmup":2,"dwell":40,"e":73.604,"l":-0.004,"q":-50.088,"share":11.7,"moves":84.6},{"dp":false,"warmup":4,"dwell":0,"e":56.719,"l":0.564,"q":-49.348,"share":12.96,"moves":84.6},{"dp":false,"warmup":4,"dwell":3,"e":56.719,"l":0.564,"q":-49.348,"share":12.96,"moves":84.6},{"dp":false,"warmup":4,"dwell":6,"e":57.655,"l":0.533,"q":-49.389,"share":12.88,"moves":84.6},{"dp":false,"warmup":4,"dwell":10,"e":59.527,"l":0.47,"q":-49.471,"share":12.73,"moves":84.6},{"dp":false,"warmup":4,"dwell":20,"e":64.207,"l":0.312,"q":-49.676,"share":12.37,"moves":84.6},{"dp":false,"warmup":4,"dwell":40,"e":73.604,"l":-0.004,"q":-50.088,"share":11.7,"moves":84.6},{"dp":false,"warmup":8,"dwell":0,"e":58.591,"l":0.501,"q":-49.43,"share":12.8,"moves":84.6},{"dp":false,"warmup":8,"dwell":3,"e":58.591,"l":0.501,"q":-49.43,"share":12.8,"moves":84.6},{"dp":false,"warmup":8,"dwell":6,"e":58.591,"l":0.501,"q":-49.43,"share":12.8,"moves":84.6},{"dp":false,"warmup":8,"dwell":10,"e":59.527,"l":0.47,"q":-49.471,"share":12.73,"moves":84.6},{"dp":false,"warmup":8,"dwell":20,"e":64.207,"l":0.312,"q":-49.676,"share":12.37,"moves":84.6},{"dp":false,"warmup":8,"dwell":40,"e":73.604,"l":-0.004,"q":-50.088,"share":11.7,"moves":84.6},{"dp":false,"warmup":12,"dwell":0,"e":60.463,"l":0.438,"q":-49.512,"share":12.65,"moves":84.6},{"dp":false,"warmup":12,"dwell":3,"e":60.463,"l":0.438,"q":-49.512,"share":12.65,"moves":84.6},{"dp":false,"warmup":12,"dwell":6,"e":60.463,"l":0.438,"q":-49.512,"share":12.65,"moves":84.6},{"dp":false,"warmup":12,"dwell":10,"e":60.463,"l":0.438,"q":-49.512,"share":12.65,"moves":84.6},{"dp":false,"warmup":12,"dwell":20,"e":64.207,"l":0.312,"q":-49.676,"share":12.37,"moves":84.6},{"dp":false,"warmup":12,"dwell":40,"e":73.604,"l":-0.004,"q":-50.088,"share":11.7,"moves":84.6},{"dp":false,"warmup":16,"dwell":0,"e":62.335,"l":0.375,"q":-49.593,"share":12.51,"moves":84.6},{"dp":false,"warmup":16,"dwell":3,"e":62.335,"l":0.375,"q":-49.593,"share":12.51,"moves":84.6},{"dp":false,"warmup":16,"dwell":6,"e":62.335,"l":0.375,"q":-49.593,"share":12.51,"moves":84.6},{"dp":false,"warmup":16,"dwell":10,"e":62.335,"l":0.375,"q":-49.593,"share":12.51,"moves":84.6},{"dp":false,"warmup":16,"dwell":20,"e":64.207,"l":0.312,"q":-49.676,"share":12.37,"moves":84.6},{"dp":false,"warmup":16,"dwell":40,"e":73.604,"l":-0.004,"q":-50.088,"share":11.7,"moves":84.6}],"ts":[{"step":0,"warm":0.972197949602177,"promo":0,"demo":0},{"step":1,"warm":0.9516522433882006,"promo":0,"demo":20},{"step":2,"warm":0.9473393050583164,"promo":1,"demo":0},{"step":3,"warm":0.9006839052472495,"promo":0,"demo":0},{"step":4,"warm":0.8752814532349474,"promo":4,"demo":0},{"step":5,"warm":0.8042743659665355,"promo":1,"demo":0},{"step":6,"warm":0.78278787758623,"promo":4,"demo":0},{"step":7,"warm":0.7312493525415663,"promo":2,"demo":0},{"step":8,"warm":0.6887750352769608,"promo":2,"demo":0},{"step":9,"warm":0.6808316743626759,"promo":12,"demo":0},{"step":10,"warm":0.5605915137942843,"promo":14,"demo":0},{"step":11,"warm":0.4301888124559989,"promo":9,"demo":0},{"step":12,"warm":0.34324384020198234,"promo":2,"demo":0},{"step":13,"warm":0.32801546589244795,"promo":1,"demo":0},{"step":14,"warm":0.3093952432683877,"promo":0,"demo":0},{"step":15,"warm":0.31333984960537836,"promo":0,"demo":0},{"step":16,"warm":0.3008885031104654,"promo":0,"demo":0},{"step":17,"warm":0.3012485009247641,"promo":0,"demo":0},{"step":18,"warm":0.2849930330440508,"promo":0,"demo":0},{"step":19,"warm":0.2914449688830615,"promo":0,"demo":0},{"step":20,"warm":0.27939814282565,"promo":0,"demo":0},{"step":21,"warm":0.27800175433428237,"promo":0,"demo":0},{"step":22,"warm":0.27440839731566125,"promo":0,"demo":0},{"step":23,"warm":0.2661957440379677,"promo":0,"demo":0},{"step":24,"warm":0.26798611433881186,"promo":0,"demo":0},{"step":25,"warm":0.2593199019337895,"promo":0,"demo":0},{"step":26,"warm":0.26521362152079403,"promo":0,"demo":0},{"step":27,"warm":0.2562763755982601,"promo":0,"demo":0},{"step":28,"warm":0.2578947072102066,"promo":0,"demo":0},{"step":29,"warm":0.2531755056109475,"promo":0,"demo":0},{"step":30,"warm":0.2529150285808843,"promo":0,"demo":0},{"step":31,"warm":0.25479250069463355,"promo":0,"demo":0},{"step":32,"warm":0.2444793885722565,"promo":0,"demo":0},{"step":33,"warm":0.23825453379307993,"promo":0,"demo":0},{"step":34,"warm":0.2504665469852624,"promo":0,"demo":0},{"step":35,"warm":0.24029980390503353,"promo":0,"demo":0},{"step":36,"warm":0.2397883296469782,"promo":0,"demo":0},{"step":37,"warm":0.23765572210761263,"promo":0,"demo":0},{"step":38,"warm":0.23849085434229683,"promo":0,"demo":0},{"step":39,"warm":0.2312330100259419,"promo":0,"demo":0},{"step":40,"warm":0.2352815124278651,"promo":0,"demo":0},{"step":41,"warm":0.2307586027132293,"promo":0,"demo":0},{"step":42,"warm":0.22832443664466862,"promo":0,"demo":0},{"step":43,"warm":0.22531669023748177,"promo":0,"demo":0},{"step":44,"warm":0.22445836069553865,"promo":0,"demo":0},{"step":45,"warm":0.22477106530236476,"promo":0,"demo":0},{"step":46,"warm":0.22853066051853366,"promo":0,"demo":0},{"step":47,"warm":0.2218012926620173,"promo":0,"demo":0},{"step":48,"warm":0.21755424510920196,"promo":0,"demo":0},{"step":49,"warm":0.22482573167349007,"promo":0,"demo":0},{"step":50,"warm":0.22332362162982808,"promo":0,"demo":1},{"step":51,"warm":0.22272510490983755,"promo":0,"demo":0},{"step":52,"warm":0.22427276511988548,"promo":0,"demo":2},{"step":53,"warm":0.21868197570764356,"promo":0,"demo":1},{"step":54,"warm":0.2281138801754571,"promo":0,"demo":1},{"step":55,"warm":0.2237031030785929,"promo":0,"demo":0},{"step":56,"warm":0.2257087917294535,"promo":0,"demo":2},{"step":57,"warm":0.22205841804179655,"promo":0,"demo":1},{"step":58,"warm":0.22318168853831438,"promo":0,"demo":0},{"step":59,"warm":0.21935973227554736,"promo":0,"demo":0},{"step":60,"warm":0.2329549003280136,"promo":0,"demo":0},{"step":61,"warm":0.22186584344030674,"promo":0,"demo":2},{"step":62,"warm":0.2256611377312048,"promo":0,"demo":1},{"step":63,"warm":0.2260398684174221,"promo":0,"demo":2}],"real":[{"trace":"chart","split":"train","policy":"flat","energy":119238240.0,"latency":1310284.8000000073,"quality":0.0,"warm":0.0,"promos":0,"demos":0,"e":840.8827775951405,"q":-100.0},{"trace":"chart","split":"train","policy":"static_modality","energy":12673017.599999892,"latency":1757567.9999999725,"quality":0.0031097439098240393,"warm":6.219487819648078,"promos":0,"demos":0,"e":0.0,"q":0.0},{"trace":"chart","split":"train","policy":"dynamic (chosen)","energy":11590013.999999914,"latency":1775207.9999999718,"quality":0.00326733545401249,"warm":6.53467090802498,"promos":11,"demos":31,"e":-8.545743675129014,"q":5.067669517435203},{"trace":"chart","split":"train","policy":"dynamic (synthetic defaults)","energy":9417569.499999927,"latency":1783702.79999997,"quality":0.004258433146367423,"warm":8.516866292734846,"promos":0,"demos":40,"e":-25.688026346621594,"q":36.93838688499533},{"trace":"scene","split":"train","policy":"flat","energy":119632416.0,"latency":1314616.3200000077,"quality":0.0,"warm":0.0,"promos":0,"demos":0,"e":815.5172844458431,"q":-100.0},{"trace":"scene","split":"train","policy":"static_modality","energy":13067193.599999892,"latency":1761899.519999973,"quality":0.0033877141915246533,"warm":6.775428383049306,"promos":0,"demos":0,"e":0.0,"q":0.0},{"trace":"scene","split":"train","policy":"dynamic (chosen)","energy":12468054.299999932,"latency":1778443.919999973,"quality":0.003048891118524076,"warm":6.097782237048152,"promos":14,"demos":31,"e":-4.585064845139852,"q":-10.001524740435341},{"trace":"scene","split":"train","policy":"dynamic (synthetic defaults)","energy":9512267.599999927,"latency":1793344.3199999696,"quality":0.004647210225451157,"warm":9.294420450902313,"promos":0,"demos":53,"e":-27.204969244505527,"q":37.17834394287147},{"trace":"noise_label","split":"TEST","policy":"flat","energy":119369632.0,"latency":1311728.6400000076,"quality":0.0,"warm":0.0,"promos":0,"demos":0,"e":832.2540884665311,"q":-100.0},{"trace":"noise_label","split":"TEST","policy":"static_modality","energy":12804409.599999892,"latency":1759011.8399999728,"quality":0.0027375374140530895,"warm":5.475074828106179,"promos":0,"demos":0,"e":0.0,"q":0.0},{"trace":"noise_label","split":"TEST","policy":"dynamic (chosen)","energy":10963747.19999993,"latency":1776714.2399999718,"quality":0.003064239933263949,"warm":6.128479866527899,"promos":5,"demos":27,"e":-14.375222735767345,"q":11.934175494140797},{"trace":"noise_label","split":"TEST","policy":"dynamic (synthetic defaults)","energy":9900289.699999928,"latency":1785542.6399999703,"quality":0.0038911058780879957,"warm":7.782211756175991,"promos":2,"demos":44,"e":-22.68062324404233,"q":42.138911348319375}],"m6":[{"mode":"avg_dense","trace":"chart","split":"train","ratio":9.408827775951405,"skipped":0.0,"e":-8.545743675129014,"q":5.067669517435203,"moves":42,"px":2.0,"dx":0.4,"warm_s":6.219487819648078,"warm_d":6.53467090802498},{"mode":"avg_dense","trace":"scene","split":"train","ratio":9.15517284445843,"skipped":0.0,"e":-4.585064845139852,"q":-10.001524740435341,"moves":45,"px":2.0,"dx":0.4,"warm_s":6.775428383049306,"warm_d":6.097782237048152},{"mode":"avg_dense","trace":"noise_label","split":"TEST","ratio":9.322540884665312,"skipped":0.0,"e":-14.375222735767345,"q":11.934175494140797,"moves":32,"px":2.0,"dx":0.4,"warm_s":5.475074828106179,"warm_d":6.128479866527899},{"mode":"avg_sparse10","trace":"chart","split":"train","ratio":1.598869776444282,"skipped":3.6488715931339377,"e":0.0,"q":0.0,"moves":0,"px":8.0,"dx":0.02,"warm_s":2.918922262324057,"warm_d":2.918922262324057},{"mode":"avg_sparse10","trace":"scene","split":"train","ratio":1.6409532495517298,"skipped":3.314833037833118,"e":0.24561491536472246,"q":0.0,"moves":1,"px":8.0,"dx":0.02,"warm_s":3.971606737531831,"warm_d":3.971606737531831},{"mode":"avg_sparse10","trace":"noise_label","split":"TEST","ratio":1.5628131975967399,"skipped":3.233910554315717,"e":0.23441025912656066,"q":0.0,"moves":1,"px":8.0,"dx":0.02,"warm_s":2.5742955965748644,"warm_d":2.5742955965748644},{"mode":"layer_dense","trace":"chart","split":"train","ratio":9.40882777594945,"skipped":0.0,"e":-20.55793118026089,"q":-1.9970142059648754,"moves":1288,"px":4.0,"dx":0.4,"warm_s":6.219479570735369,"warm_d":6.095275680170704},{"mode":"layer_dense","trace":"scene","split":"train","ratio":9.155172844456583,"skipped":0.0,"e":-19.413559593011154,"q":-10.263677393031113,"moves":1423,"px":4.0,"dx":0.4,"warm_s":6.7753603582687605,"warm_d":6.079959228880736},{"mode":"layer_dense","trace":"noise_label","split":"TEST","ratio":9.322540884663393,"skipped":0.0,"e":-19.950653354113435,"q":0.7929056027668357,"moves":1163,"px":4.0,"dx":0.4,"warm_s":5.475052114820295,"warm_d":5.518464109793112},{"mode":"layer_sparse10","trace":"chart","split":"train","ratio":1.9988977641970898,"skipped":2.2719421346883624,"e":6.515893019990648,"q":-3.1932783975199386,"moves":974,"px":8.0,"dx":0.2,"warm_s":4.135883891813672,"warm_d":4.003813604949879},{"mode":"layer_sparse10","trace":"scene","split":"train","ratio":1.9396367866568023,"skipped":2.074579153303306,"e":7.456520572227299,"q":-7.816641839252181,"moves":1051,"px":8.0,"dx":0.2,"warm_s":4.890884617617427,"warm_d":4.5085816842871935},{"mode":"layer_sparse10","trace":"noise_label","split":"TEST","ratio":1.9040788160928648,"skipped":2.0654174117156767,"e":3.68772999781084,"q":-0.180172320152161,"moves":881,"px":8.0,"dx":0.2,"warm_s":3.5876062878551105,"warm_d":3.581142414368357}],"int4":{"K":[0.086,0.1026,0.0982,0.1005,0.1019,0.1008,0.1024,0.0986,0.1076,0.0997,0.1044,0.0916,0.1105,0.1029,0.1067,0.0977,0.0978,0.1081,0.1029,0.1098,0.1001,0.1068,0.1048,0.0994,0.1037,0.102,0.1046,0.1037,0.1088,0.1003],"V":[0.1011,0.0887,0.0858,0.0823,0.0806,0.0829,0.0795,0.0814,0.0808,0.0847,0.0822,0.0823,0.0811,0.0799,0.0806,0.0809,0.0803,0.0805,0.0809,0.0823,0.0787,0.0792,0.0792,0.0784,0.0788,0.0795,0.078,0.0796,0.0781,0.0785],"summary":[{"t":"K","scheme":"tok_g32","who":"text","err":0.1021,"n":90},{"t":"K","scheme":"tok_g32","who":"visual","err":0.1022,"n":90},{"t":"K","scheme":"tok_g64","who":"text","err":0.1334,"n":90},{"t":"K","scheme":"tok_g64","who":"visual","err":0.1344,"n":90},{"t":"V","scheme":"tok_g32","who":"text","err":0.0826,"n":90},{"t":"V","scheme":"tok_g32","who":"visual","err":0.0806,"n":90},{"t":"V","scheme":"tok_g64","who":"text","err":0.0981,"n":90},{"t":"V","scheme":"tok_g64","who":"visual","err":0.0941,"n":90}]}};
+const NS = 'http://www.w3.org/2000/svg';
+const LAYER = {
+  vis: [0.39,0.17,0.04,0.03,0.05,0.07,0.04,0.04,0.1,0.07,0.04,0.06,0.06,0.03,0.07,0.16,0.04,0.17,0.11,0.04,0.12,0.22,0.19,0.21,0.14,0.03,0.04,0.06,0.07,0.1],
+  max: [0.7,0.44,0.13,0.08,0.27,0.25,0.12,0.22,0.4,0.24,0.14,0.15,0.2,0.15,0.26,0.46,0.15,0.5,0.4,0.2,0.45,0.62,0.62,0.49,0.38,0.15,0.16,0.3,0.23,0.31],
+  sink: [0.0,0.0,0.01,0.08,0.07,0.06,0.07,0.07,0.08,0.07,0.02,0.0,0.52,0.51,0.75,0.4,0.46,0.59,0.65,0.48,0.78,0.43,0.45,0.66,0.73,0.7,0.73,0.48,0.64,0.54]
+};
+const COMP = [
+  {name: 'chart', vis: 6, sink: 35, gen: 36},
+  {name: 'scene', vis: 7, sink: 34, gen: 37},
+  {name: 'noise_label', vis: 5, sink: 34, gen: 37}
+];
+const POL = {
+  flat: {label: 'flat', c: 'var(--s1)'},
+  static_modality: {label: 'static modality', c: 'var(--s2)'},
+  dynamic_hybrid: {label: 'dynamic hybrid', c: 'var(--s3)'},
+  all_warm: {label: 'all WARM', c: 'var(--s4)'}
+};
+
+function el(tag, attrs, parent, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function html(tag, attrs, parent, text) {
+  const e = document.createElement(tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const tip = document.getElementById('tip');
+function showTip(ev, h) {
+  tip.innerHTML = h; tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+  tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+}
+function hideTip() { tip.hidden = true; }
+function hover(node, h) {
+  node.addEventListener('pointermove', e => showTip(e, h));
+  node.addEventListener('pointerdown', e => showTip(e, h));
+  node.addEventListener('pointerleave', hideTip);
+}
+function niceTicks(lo, hi, n) {
+  const span = hi - lo, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / mag, step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * mag;
+  const out = []; for (let v = Math.ceil(lo / step - 1e-9) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10));
+  return out;
+}
+function mount(host, draw) {
+  let last = 0;
+  const run = () => { const w = Math.floor(host.clientWidth); if (w > 0 && w !== last) { last = w; draw(w); } };
+  new ResizeObserver(run).observe(host); run();
+}
+const sgn = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
+const sgn0 = v => (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(0) + '%';
+const mpj = v => (v / 1e6).toFixed(2) + 'M pJ';
+const kns = v => (v / 1e3).toFixed(1) + 'k ns';
+
+function legend(host, items) {
+  host.textContent = '';
+  items.forEach(it => {
+    const s = html('span', {}, host);
+    const i = html('i', it.ring ? {class: 'ring', style: 'color:' + it.c} : {style: 'background:' + it.c}, s);
+    s.appendChild(document.createTextNode(it.label));
+  });
+}
+function tableView(host, headers, rows) {
+  host.textContent = '';
+  const t = html('table', {}, host), th = html('thead', {}, t).appendChild(html('tr'));
+  headers.forEach((h, i) => html('th', i ? {class: 'n'} : {}, th, h));
+  const tb = html('tbody', {}, t);
+  rows.forEach(r => { const tr = html('tr', {}, tb); r.forEach((c, i) => html('td', i ? {class: 'n'} : {}, tr, c)); });
+}
+
+/* horizontal bars: rows of {label, value, color, text, tip} */
+function hbars(host, w, rows, max, opts) {
+  opts = opts || {};
+  host.textContent = '';
+  const lw = Math.min(opts.lw || 112, w * 0.38), vw = opts.vw || 70, rh = 30, h = rows.length * rh + 6;
+  const iw = Math.max(40, w - lw - vw);
+  const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': opts.aria || ''}, host);
+  el('line', {x1: lw, x2: lw, y1: 0, y2: h, class: 'axis'}, svg);
+  rows.forEach((r, i) => {
+    const y = i * rh + 4, bw = Math.max(2, r.value / max * iw);
+    el('text', {x: lw - 8, y: y + 15, 'text-anchor': 'end', class: 'tl'}, svg, r.label);
+    const b = el('rect', {x: lw, y, width: bw, height: 20, rx: 3, style: 'fill:' + r.color}, svg);
+    el('text', {x: lw + bw + 6, y: y + 15, class: 'tv'}, svg, r.text);
+    const hit = el('rect', {x: 0, y: y - 3, width: w, height: rh - 2, style: 'fill:transparent'}, svg);
+    if (r.tip) hover(hit, r.tip);
+  });
+}
+
+/* generic scatter */
+function scatter(host, w, o) {
+  host.textContent = '';
+  const h = o.h || 340, m = {l: 58, r: 20, t: 16, b: 48};
+  const iw = w - m.l - m.r, ih = h - m.t - m.b;
+  const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': o.aria || ''}, host);
+  const X = v => m.l + (v - o.x[0]) / (o.x[1] - o.x[0]) * iw;
+  const Y = o.ylog ? v => m.t + ih - (Math.log(v) - Math.log(o.y[0])) / (Math.log(o.y[1]) - Math.log(o.y[0])) * ih
+                   : v => m.t + ih - (v - o.y[0]) / (o.y[1] - o.y[0]) * ih;
+  (o.yticks || niceTicks(o.y[0], o.y[1], 5)).forEach(v => {
+    el('line', {x1: m.l, x2: w - m.r, y1: Y(v), y2: Y(v), class: 'grid'}, svg);
+    el('text', {x: m.l - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 't'}, svg, (o.yfmt || (x => x))(v));
+  });
+  (o.xticks || niceTicks(o.x[0], o.x[1], Math.max(3, Math.floor(iw / 90)))).forEach(v => {
+    el('line', {x1: X(v), x2: X(v), y1: m.t, y2: m.t + ih, class: 'grid'}, svg);
+    el('text', {x: X(v), y: m.t + ih + 18, 'text-anchor': 'middle', class: 't'}, svg, (o.xfmt || (x => x))(v));
+  });
+  el('line', {x1: m.l, x2: w - m.r, y1: m.t + ih, y2: m.t + ih, class: 'axis'}, svg);
+  el('line', {x1: m.l, x2: m.l, y1: m.t, y2: m.t + ih, class: 'axis'}, svg);
+  (o.refs || []).forEach(r => {
+    const y = Y(r.y);
+    el('line', {x1: m.l, x2: w - m.r, y1: y, y2: y, class: 'axis', 'stroke-dasharray': '4 4'}, svg);
+    el('text', {x: w - m.r - 4, y: y - 5, 'text-anchor': 'end', class: 't'}, svg, r.label);
+  });
+  el('text', {x: m.l + iw / 2, y: h - 6, 'text-anchor': 'middle', class: 'tl'}, svg, o.xlabel);
+  el('text', {x: 14, y: m.t + ih / 2, 'text-anchor': 'middle', class: 'tl', transform: `rotate(-90 14 ${m.t + ih / 2})`}, svg, o.ylabel);
+  const labels = [];
+  o.points.forEach(p => {
+    const cx = X(p.x), cy = Y(p.y);
+    const hit = el('circle', {cx, cy, r: (p.r || 4) + 6, style: 'fill:transparent'}, svg);
+    el('circle', {cx, cy, r: p.r || 4, style: `fill:${p.fill};stroke:var(--surface);stroke-width:2;${p.op ? 'opacity:' + p.op : ''}`}, svg);
+    if (p.ring) el('circle', {cx, cy, r: (p.r || 4) + 4, style: `fill:none;stroke:${p.fill};stroke-width:2`}, svg);
+    if (p.tip) hover(hit, p.tip);
+    if (p.label) labels.push({p, cx, cy});
+  });
+  labels.forEach(({p, cx, cy}) => el('text', {x: cx + (p.dx || 10), y: cy + (p.dy || 4), 'text-anchor': p.anchor || 'start', class: 'tv'}, svg, p.label));
+}
+
+/* ---------- Figure 4: policies ---------- */
+(function () {
+  const order = ['flat', 'static_modality', 'dynamic_hybrid', 'all_warm'];
+  const P = Object.fromEntries(D.policies.map(p => [p.policy, p]));
+  legend(document.getElementById('lg-pol'), order.map(k => ({label: POL[k].label, c: POL[k].c})));
+  const host = document.getElementById('f-policies');
+  const defs = [
+    {t: 'Total energy (pJ)', k: 'energy', fmt: mpj},
+    {t: 'Total latency (ns)', k: 'latency', fmt: kns},
+    {t: 'Mean quality loss', k: 'quality', fmt: v => v.toFixed(4)}
+  ];
+  defs.forEach(d => {
+    const col = html('div', {}, host); html('div', {class: 'panel-h'}, col, d.t);
+    const chart = html('div', {class: 'chart'}, col);
+    const max = Math.max(...order.map(k => P[k][d.k]));
+    mount(chart, w => hbars(chart, w, order.map(k => ({
+      label: POL[k].label, value: P[k][d.k], color: POL[k].c, text: d.fmt(P[k][d.k]),
+      tip: `<b>${POL[k].label}</b><br>${d.t}: ${d.fmt(P[k][d.k])}<br>WARM attention: ${P[k].warm.toFixed(1)}%<br>moves: ${P[k].promos} up, ${P[k].demos} down`
+    })), max, {aria: d.t, lw: 104, vw: 76}));
+  });
+  tableView(document.getElementById('tv-policies'), ['policy', 'energy', 'latency', 'quality loss', 'WARM attn %', 'promotions', 'demotions'],
+    order.map(k => [POL[k].label, mpj(P[k].energy), kns(P[k].latency), P[k].quality.toFixed(4), P[k].warm.toFixed(1), P[k].promos, P[k].demos]));
+})();
+
+/* ---------- Figure 5: Pareto ---------- */
+(function () {
+  const P = Object.fromEntries(D.policies.map(p => [p.policy, p]));
+  const sE = P.static_modality.energy;
+  legend(document.getElementById('lg-par'), [
+    {label: 'dynamic, one threshold pair', c: 'var(--s3)'}, {label: 'flat', c: 'var(--s1)'},
+    {label: 'static modality', c: 'var(--s2)'}, {label: 'all WARM', c: 'var(--s4)'}
+  ]);
+  const costs = [...new Set(D.sweep.map(r => r[2]))].sort((a, b) => a - b);
+  const show = [1, 10, 20];
+  let cur = 10;
+  const seg = document.getElementById('par-seg'), host = document.getElementById('f-pareto');
+  const draw = w => {
+    const rows = D.sweep.filter(r => r[2] === cur);
+    const pts = rows.map(r => ({
+      x: r[5], y: 1 + r[3] / 100, fill: 'var(--s3)', r: 4.5, op: 0.85,
+      tip: `<b>promote ${r[0]}, demote ${r[1]}</b><br>energy vs static: ${sgn(r[3])}<br>quality loss vs static: ${sgn(r[6])}<br>moves: ${r[7]}`
+    }));
+    ['flat', 'static_modality', 'all_warm'].forEach(k => pts.push({
+      x: P[k].quality, y: P[k].energy / sE, fill: POL[k].c, r: 8, label: POL[k].label,
+      dx: k === 'all_warm' ? -12 : 14, dy: k === 'static_modality' ? 16 : 4, anchor: k === 'all_warm' ? 'end' : 'start',
+      tip: `<b>${POL[k].label}</b> (reference)<br>energy: ${(P[k].energy / sE).toFixed(2)}× static<br>quality loss: ${P[k].quality.toFixed(4)}`
+    }));
+    scatter(host, w, {
+      h: 360, x: [0, 0.056], y: [0.15, 12], ylog: true, yticks: [0.2, 0.5, 1, 2, 5, 10], yfmt: v => v + '×',
+      xticks: [0, 0.01, 0.02, 0.03, 0.04, 0.05], xfmt: v => v.toFixed(2),
+      xlabel: 'mean quality loss (lower is better)', ylabel: 'energy ÷ static modality',
+      refs: [{y: 1, label: 'static energy'}], points: pts,
+      aria: `Energy against quality loss for ${rows.length} threshold pairs at ${cur} times move cost`
+    });
+    const rs = rows.slice().sort((a, b) => a[3] - b[3]);
+    tableView(document.getElementById('tv-pareto'), ['promote', 'demote', 'energy vs static', 'quality loss', 'quality vs static', 'moves'],
+      rs.map(r => [r[0], r[1], sgn(r[3]), r[5].toFixed(4), sgn(r[6]), r[7]]));
+  };
+  show.filter(c => costs.includes(c)).forEach(c => {
+    const b = html('button', {type: 'button', 'aria-pressed': c === cur ? 'true' : 'false'}, seg, c + '× move cost');
+    b.addEventListener('click', () => {
+      cur = c; seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+      draw(Math.floor(host.clientWidth));
+    });
+  });
+  let last = 0;
+  new ResizeObserver(() => { const w = Math.floor(host.clientWidth); if (w > 0 && w !== last) { last = w; draw(w); } }).observe(host);
+  draw(Math.floor(host.clientWidth) || 600);
+})();
+
+/* ---------- Figure 6: energy vs move cost ---------- */
+(function () {
+  const rows = D.sweep.filter(r => r[0] === 0.006 && r[1] === 0.002).sort((a, b) => a[2] - b[2]);
+  const host = document.getElementById('f-cost');
+  mount(host, w => {
+    host.textContent = '';
+    const h = 250, m = {l: 58, r: 28, t: 18, b: 46}, iw = w - m.l - m.r, ih = h - m.t - m.b;
+    const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': 'Energy overhead against move cost multiplier'}, host);
+    const xmax = 20, ymax = 80;
+    const X = v => m.l + v / xmax * iw, Y = v => m.t + ih - v / ymax * ih;
+    [0, 20, 40, 60, 80].forEach(v => {
+      el('line', {x1: m.l, x2: w - m.r, y1: Y(v), y2: Y(v), class: 'grid'}, svg);
+      el('text', {x: m.l - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 't'}, svg, '+' + v + '%');
+    });
+    [0, 5, 10, 15, 20].forEach(v => el('text', {x: X(v), y: m.t + ih + 18, 'text-anchor': 'middle', class: 't'}, svg, v + '×'));
+    el('line', {x1: m.l, x2: w - m.r, y1: m.t + ih, y2: m.t + ih, class: 'axis'}, svg);
+    el('text', {x: m.l + iw / 2, y: h - 6, 'text-anchor': 'middle', class: 'tl'}, svg, 'move cost, multiples of one HOT access');
+    el('text', {x: 14, y: m.t + ih / 2, 'text-anchor': 'middle', class: 'tl', transform: `rotate(-90 14 ${m.t + ih / 2})`}, svg, 'energy vs static');
+    el('polyline', {points: rows.map(r => `${X(r[2])},${Y(r[3])}`).join(' '), style: 'fill:none;stroke:var(--s3);stroke-width:2'}, svg);
+    rows.forEach((r, i) => {
+      el('circle', {cx: X(r[2]), cy: Y(r[3]), r: 4.5, style: 'fill:var(--s3);stroke:var(--surface);stroke-width:2'}, svg);
+      const hit = el('circle', {cx: X(r[2]), cy: Y(r[3]), r: 14, style: 'fill:transparent'}, svg);
+      hover(hit, `<b>${r[2]}× move cost</b><br>energy vs static: ${sgn(r[3])}<br>quality vs static: ${sgn(r[6])}`);
+      if (r[2] === 1 || r[2] === 10 || r[2] === 20) el('text', {x: X(r[2]) + (r[2] === 20 ? -8 : 0), y: Y(r[3]) - 12, 'text-anchor': r[2] === 20 ? 'end' : 'middle', class: 'tv'}, svg, sgn(r[3]));
+    });
+  });
+})();
+
+/* ---------- Figure 7: damping sweep ---------- */
+(function () {
+  const all = D.damping;
+  const pick = (w, d) => all.find(r => r.dp && r.warmup === w && r.dwell === d);
+  const un = pick(0, 0), w2 = pick(2, 0), d20 = pick(0, 20);
+  legend(document.getElementById('lg-damp'), [
+    {label: 'one variant', c: 'var(--s3)'}, {label: 'highlighted variant', c: 'var(--s3)', ring: true}
+  ]);
+  const host = document.getElementById('f-damp');
+  mount(host, w => {
+    const pts = all.map(r => ({
+      x: r.e, y: r.q, fill: 'var(--s3)', r: 4, op: 0.55,
+      tip: `<b>warmup ${r.warmup}, dwell ${r.dwell}${r.dp ? '' : ', promotions undamped'}</b><br>energy: ${sgn(r.e)}<br>quality loss: ${sgn(r.q)}<br>moves: ${r.moves}, reconfig share: ${r.share.toFixed(1)}%`
+    }));
+    [[un, 'undamped', 12, -10, 'start'], [w2, 'warmup 2 (default)', -14, 16, 'end'], [d20, 'dwell 20', 12, 18, 'start']].forEach(([r, l, dx, dy, a]) =>
+      pts.push({x: r.e, y: r.q, fill: 'var(--s3)', r: 5, ring: true, label: l, dx, dy, anchor: a,
+        tip: `<b>${l}</b><br>energy: ${sgn(r.e)}<br>quality loss: ${sgn(r.q)}<br>moves: ${r.moves}`}));
+    scatter(host, w, {h: 340, x: [20, 80], y: [-55, -15], xticks: [20, 30, 40, 50, 60, 70, 80], yticks: [-50, -40, -30, -20],
+      xfmt: v => '+' + v + '%', yfmt: v => '−' + Math.abs(v) + '%',
+      xlabel: 'energy vs static modality (lower is better)', ylabel: 'quality loss vs static (lower is better)',
+      points: pts, aria: 'Damping sweep: energy against quality loss for 72 policy variants'});
+  });
+  const rows = all.filter(r => r.dp).sort((a, b) => a.e - b.e);
+  tableView(document.getElementById('tv-damp'), ['warmup', 'dwell', 'energy vs static', 'quality vs static', 'reconfig share', 'moves'],
+    rows.map(r => [r.warmup, r.dwell, sgn(r.e), sgn(r.q), r.share.toFixed(1) + '%', r.moves]));
+})();
+
+/* ---------- Figure 8: timeline ---------- */
+(function () {
+  legend(document.getElementById('lg-ts'), [
+    {label: 'WARM share of attention', c: 'var(--s3)'}, {label: 'promotions', c: 'var(--s1)'}, {label: 'demotions', c: 'var(--s2)'}
+  ]);
+  const host = document.getElementById('f-ts'), ts = D.ts;
+  mount(host, w => {
+    host.textContent = '';
+    const h = 330, m = {l: 58, r: 20, t: 14, b: 40}, iw = w - m.l - m.r;
+    const topH = 140, gap = 34, botH = 100;
+    const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': 'WARM attention share and tier moves per decode step'}, host);
+    const n = ts.length, X = i => m.l + (i + 0.5) / n * iw, bw = Math.max(2, iw / n - 2);
+    const Y1 = v => m.t + topH - v * topH;
+    [0, 0.25, 0.5, 0.75, 1].forEach(v => {
+      el('line', {x1: m.l, x2: w - m.r, y1: Y1(v), y2: Y1(v), class: 'grid'}, svg);
+      el('text', {x: m.l - 8, y: Y1(v) + 4, 'text-anchor': 'end', class: 't'}, svg, Math.round(v * 100) + '%');
+    });
+    el('polyline', {points: ts.map((r, i) => `${X(i)},${Y1(r.warm)}`).join(' '), style: 'fill:none;stroke:var(--s3);stroke-width:2'}, svg);
+    const top2 = m.t + topH + gap, maxm = 22, zero = top2 + botH * 0.38, sc = botH * 0.38 / 22;
+    [20, 10, 0].forEach(v => { /* promotions scale upward is 0..14 only; label demotions side */ });
+    el('line', {x1: m.l, x2: w - m.r, y1: zero, y2: zero, class: 'axis'}, svg);
+    [-20, -10, 10].forEach(v => {
+      const y = zero - v * sc * (v > 0 ? 1 : 1);
+      el('line', {x1: m.l, x2: w - m.r, y1: y, y2: y, class: 'grid'}, svg);
+      el('text', {x: m.l - 8, y: y + 4, 'text-anchor': 'end', class: 't'}, svg, v > 0 ? v + ' up' : Math.abs(v) + ' down');
+    });
+    ts.forEach((r, i) => {
+      if (r.promo) el('rect', {x: X(i) - bw / 2, y: zero - r.promo * sc, width: bw, height: r.promo * sc, style: 'fill:var(--s1)'}, svg);
+      if (r.demo) el('rect', {x: X(i) - bw / 2, y: zero, width: bw, height: r.demo * sc, style: 'fill:var(--s2)'}, svg);
+      const hit = el('rect', {x: X(i) - iw / n / 2, y: m.t, width: iw / n, height: topH + gap + botH, style: 'fill:transparent'}, svg);
+      hover(hit, `<b>step ${r.step}</b><br>WARM attention: ${(r.warm * 100).toFixed(1)}%<br>promotions: ${r.promo}<br>demotions: ${r.demo}`);
+    });
+    [0, 16, 32, 48, 63].forEach(i => el('text', {x: X(i), y: top2 + botH + 18, 'text-anchor': 'middle', class: 't'}, svg, i));
+    el('text', {x: m.l + iw / 2, y: h - 4, 'text-anchor': 'middle', class: 'tl'}, svg, 'decode step');
+    const burst = ts.findIndex(r => r.demo >= 15);
+    if (burst >= 0) el('text', {x: X(burst) + 8, y: zero + ts[burst].demo * sc - 2, class: 'tv'}, svg, ts[burst].demo + ' demotions (cold start)');
+  });
+})();
+
+/* ---------- Figure 9: composition ---------- */
+(function () {
+  legend(document.getElementById('lg-comp'), [
+    {label: 'visual tokens', c: 'var(--s1)'}, {label: 'sink (position 0)', c: 'var(--s2)'},
+    {label: 'generated tokens', c: 'var(--s3)'}, {label: 'other prompt text', c: 'var(--seg)'}
+  ]);
+  const host = document.getElementById('f-comp');
+  mount(host, w => {
+    host.textContent = '';
+    const lw = Math.min(104, w * 0.3), rh = 52, h = COMP.length * rh + 8, iw = w - lw - 8;
+    const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': 'Attention mass partition for three real traces'}, host);
+    COMP.forEach((r, i) => {
+      const y = i * rh + 18, rest = 100 - r.vis - r.sink - r.gen;
+      el('text', {x: lw - 8, y: y + 17, 'text-anchor': 'end', class: 'tl'}, svg, r.name);
+      let x = lw;
+      [['visual tokens', r.vis, 'var(--s1)'], ['sink (position 0)', r.sink, 'var(--s2)'], ['generated tokens', r.gen, 'var(--s3)'], ['other prompt text', rest, 'var(--seg)']].forEach(([n, v, c], j) => {
+        const sw = v / 100 * iw;
+        const rect = el('rect', {x, y, width: Math.max(1, sw - 2), height: 26, style: 'fill:' + c}, svg);
+        hover(rect, `<b>${r.name}</b><br>${n}: ${v}%`);
+        if (j === 0) el('text', {x: x + 2, y: y - 5, class: 'tv'}, svg, v + '% visual');
+        else if (sw > 34) el('text', {x: x + sw / 2 - 1, y: y + 18, 'text-anchor': 'middle', style: 'fill:#fff;font:500 12px var(--mono)'}, svg, v + '%');
+        x += sw;
+      });
+    });
+  });
+})();
+
+/* ---------- Figure 10: WARM mass, synthetic vs real ---------- */
+(function () {
+  const syn = D.policies.find(p => p.policy === 'static_modality').warm;
+  const rows = [{label: 'synthetic', v: syn, c: 'var(--s2)'}].concat(
+    D.real.filter(r => r.policy === 'static_modality').map(r => ({label: 'real · ' + r.trace, v: r.warm, c: 'var(--s2)'})));
+  const host = document.getElementById('f-warm');
+  mount(host, w => hbars(host, w, rows.map(r => ({label: r.label, value: r.v, color: r.c, text: r.v.toFixed(1) + '%',
+    tip: `<b>${r.label}</b><br>attention served from WARM: ${r.v.toFixed(1)}%`})), 100, {lw: 128, vw: 56, aria: 'Share of attention served from WARM under static modality'}));
+})();
+
+/* ---------- Figure 11: real-trace results ---------- */
+(function () {
+  const names = ['chart', 'scene', 'noise_label'];
+  legend(document.getElementById('lg-real'), [
+    {label: 'thresholds chosen on train traces', c: 'var(--s3)'}, {label: 'synthetic default thresholds', c: 'var(--s3)', ring: true}
+  ]);
+  const host = document.getElementById('f-real');
+  const get = (t, p) => D.real.find(r => r.trace === t && r.policy === p);
+  [['e', 'Energy vs static', -35, 20], ['q', 'Quality loss vs static', -20, 50]].forEach(([k, title, lo, hi]) => {
+    const col = html('div', {}, host); html('div', {class: 'panel-h'}, col, title + ' (lower is better)');
+    const chart = html('div', {class: 'chart'}, col);
+    mount(chart, w => {
+      chart.textContent = '';
+      const lw = Math.min(110, w * 0.3), gh = 70, h = names.length * gh + 28, iw = w - lw - 14;
+      const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': title + ' on three real traces'}, chart);
+      const X = v => lw + (v - lo) / (hi - lo) * iw;
+      niceTicks(lo, hi, 4).forEach(v => {
+        el('line', {x1: X(v), x2: X(v), y1: 0, y2: h - 22, class: v === 0 ? 'axis' : 'grid'}, svg);
+        el('text', {x: X(v), y: h - 6, 'text-anchor': 'middle', class: 't'}, svg, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%');
+      });
+      names.forEach((n, i) => {
+        const y = i * gh + 6, split = get(n, 'static_modality').split;
+        el('text', {x: lw - 8, y: y + 20, 'text-anchor': 'end', class: 'tl'}, svg, n);
+        el('text', {x: lw - 8, y: y + 36, 'text-anchor': 'end', class: 't'}, svg, split === 'TEST' ? 'held out' : 'train');
+        [['dynamic (chosen)', false], ['dynamic (synthetic defaults)', true]].forEach(([p, ring], j) => {
+          const v = get(n, p)[k], yy = y + j * 26, x0 = X(0), x1 = X(v);
+          const style = ring ? 'fill:none;stroke:var(--s3);stroke-width:2' : 'fill:var(--s3)';
+          const r = el('rect', {x: Math.min(x0, x1), y: yy, width: Math.max(2, Math.abs(x1 - x0)), height: 20, rx: 3, style}, svg);
+          const lab = sgn(v), right = v >= 0;
+          el('text', {x: right ? x1 + 6 : x1 - 6, y: yy + 15, 'text-anchor': right ? 'start' : 'end', class: 'tv'}, svg, lab);
+          const hit = el('rect', {x: lw, y: yy - 2, width: iw, height: 24, style: 'fill:transparent'}, svg);
+          const row = get(n, p);
+          hover(hit, `<b>${n}</b> · ${p}<br>energy vs static: ${sgn(row.e)}<br>quality vs static: ${sgn(row.q)}<br>moves: ${row.promos} up, ${row.demos} down`);
+        });
+      });
+    });
+  });
+  const rows = D.real.filter(r => r.policy !== 'flat');
+  tableView(document.getElementById('tv-real'), ['trace', 'split', 'policy', 'energy', 'quality loss', 'WARM attn %', 'moves (up/down)', 'energy vs static', 'quality vs static'],
+    rows.map(r => [r.trace, r.split, r.policy, mpj(r.energy), r.quality.toFixed(4), r.warm.toFixed(1), r.promos + '/' + r.demos, sgn(r.e), r.policy === 'static_modality' ? '0.0%' : sgn(r.q)]));
+})();
+
+/* ---------- Figure 12: per layer ---------- */
+(function () {
+  legend(document.getElementById('lg-layer'), [
+    {label: 'mean over heads', c: 'var(--s1)'}, {label: 'strongest head', c: 'var(--fg)', ring: true}, {label: 'sink share (position 0)', c: 'var(--s2)'}
+  ]);
+  const draw = (id, bars, dots, title, color, ymax) => {
+    const host = document.getElementById(id);
+    mount(host, w => {
+      host.textContent = '';
+      const h = 190, m = {l: 50, r: 12, t: 22, b: 32}, iw = w - m.l - m.r, ih = h - m.t - m.b, n = bars.length;
+      const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': title}, host);
+      const Y = v => m.t + ih - v / ymax * ih, slot = iw / n, bw = Math.max(3, slot - 3);
+      el('text', {x: m.l, y: 12, class: 'tl'}, svg, title);
+      [0, 0.25, 0.5, 0.75].filter(v => v <= ymax).forEach(v => {
+        el('line', {x1: m.l, x2: w - m.r, y1: Y(v), y2: Y(v), class: 'grid'}, svg);
+        el('text', {x: m.l - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 't'}, svg, Math.round(v * 100) + '%');
+      });
+      bars.forEach((v, i) => {
+        const x = m.l + i * slot + (slot - bw) / 2;
+        el('rect', {x, y: Y(v), width: bw, height: Math.max(1, ih - (Y(v) - m.t)), rx: 2, style: 'fill:' + color}, svg);
+        if (dots) el('circle', {cx: x + bw / 2, cy: Y(dots[i]), r: 3.5, style: 'fill:var(--surface);stroke:var(--fg);stroke-width:1.6'}, svg);
+        const hit = el('rect', {x: m.l + i * slot, y: m.t, width: slot, height: ih, style: 'fill:transparent'}, svg);
+        hover(hit, `<b>layer ${i}</b><br>${dots ? 'visual mass (mean): ' + (v * 100).toFixed(0) + '%<br>strongest head: ' + (dots[i] * 100).toFixed(0) + '%' : 'sink share: ' + (v * 100).toFixed(0) + '%'}`);
+        if (i % 5 === 0 || i === n - 1) el('text', {x: x + bw / 2, y: m.t + ih + 16, 'text-anchor': 'middle', class: 't'}, svg, i);
+      });
+      el('line', {x1: m.l, x2: w - m.r, y1: m.t + ih, y2: m.t + ih, class: 'axis'}, svg);
+      el('text', {x: m.l + iw / 2, y: h - 2, 'text-anchor': 'middle', class: 'tl'}, svg, 'layer index');
+    });
+  };
+  draw('f-layer-v', LAYER.vis, LAYER.max, 'Attention mass on visual tokens', 'var(--s1)', 0.8);
+  draw('f-layer-s', LAYER.sink, null, 'Attention mass on the sink token', 'var(--s2)', 0.8);
+  tableView(document.getElementById('tv-layer'), ['layer', 'visual mass (mean)', 'visual mass (strongest head)', 'sink share'],
+    LAYER.vis.map((v, i) => [i, (v * 100).toFixed(0) + '%', (LAYER.max[i] * 100).toFixed(0) + '%', (LAYER.sink[i] * 100).toFixed(0) + '%']));
+})();
+
+/* ---------- M6 ---------- */
+const MODES = [
+  ['avg_dense', 'avg · dense'], ['avg_sparse10', 'avg · sparse'],
+  ['layer_dense', 'layer · dense'], ['layer_sparse10', 'layer · sparse']
+];
+const MODE_NAME = {avg_dense: 'layer-averaged, dense', avg_sparse10: 'layer-averaged, sparse 10%', layer_dense: 'per-layer, dense', layer_sparse10: 'per-layer, sparse 10%'};
+
+/* diverging single-series bars about zero */
+function divbars(host, w, rows, lo, hi, o) {
+  o = o || {};
+  host.textContent = '';
+  const lw = Math.min(o.lw || 100, w * 0.34), rh = 30, h = rows.length * rh + 28, iw = w - lw - 20;
+  const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': o.aria || ''}, host);
+  const X = v => lw + (v - lo) / (hi - lo) * iw;
+  niceTicks(lo, hi, 4).forEach(v => {
+    el('line', {x1: X(v), x2: X(v), y1: 0, y2: h - 22, class: v === 0 ? 'axis' : 'grid'}, svg);
+    el('text', {x: X(v), y: h - 6, 'text-anchor': 'middle', class: 't'}, svg, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%');
+  });
+  rows.forEach((r, i) => {
+    const y = i * rh + 5, x0 = X(0), x1 = X(r.value);
+    el('text', {x: lw - 8, y: y + 15, 'text-anchor': 'end', class: 'tl'}, svg, r.label);
+    el('rect', {x: Math.min(x0, x1), y, width: Math.max(2, Math.abs(x1 - x0)), height: 20, rx: 3, style: r.ring ? 'fill:none;stroke:var(--s3);stroke-width:2' : 'fill:' + (r.color || 'var(--s3)')}, svg);
+    const right = r.value >= 0;
+    el('text', {x: right ? x1 + 6 : x1 - 6, y: y + 15, 'text-anchor': right ? 'start' : 'end', class: 'tv'}, svg, r.text || sgn(r.value));
+    if (r.tip) { const hit = el('rect', {x: 0, y: y - 3, width: w, height: rh - 2, style: 'fill:transparent'}, svg); hover(hit, r.tip); }
+  });
+}
+
+/* Figure 13 diagram, drawn here so the grid cells stay in sync */
+(function () {
+  const svg = document.getElementById('d-m6');
+  const defs = el('defs', {}, svg);
+  const mk = el('marker', {id: 'ah6', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse'}, defs);
+  el('path', {d: 'M0 0L10 5L0 10z', class: 'dg-ah'}, mk);
+  el('text', {x: 10, y: 22, class: 'dg-t'}, svg, 'Per-layer entries');
+  el('text', {x: 10, y: 40, class: 'dg-l'}, svg, 'one entry per (token, layer), each with its own tier');
+  const cols = ['text', 'text', 'vis', 'vis', 'vis', 'vis', 'new'];
+  const rows = [['L0', 'HHWWHWW'], ['L1', 'HWWWWWH'], ['L2', 'WHWHWWW'], ['…', null], ['L29', 'HWWWWHW']];
+  const x0 = 56, y0 = 78, cw = 46, ch = 34;
+  cols.forEach((c, i) => el('text', {x: x0 + i * cw + cw / 2 - 1, y: y0 - 8, 'text-anchor': 'middle', class: 'dg-s'}, svg, c));
+  rows.forEach((r, j) => {
+    const y = y0 + j * ch;
+    el('text', {x: x0 - 8, y: y + 21, 'text-anchor': 'end', class: 'dg-s'}, svg, r[0]);
+    if (!r[1]) { el('text', {x: x0 + cols.length * cw / 2, y: y + 22, 'text-anchor': 'middle', class: 'dg-s'}, svg, '⋮'); return; }
+    [...r[1]].forEach((t, i) => el('rect', {x: x0 + i * cw, y, width: cw - 4, height: ch - 4, rx: 3, class: t === 'H' ? 'dg-hot' : 'dg-warm'}, svg));
+  });
+  const ly = y0 + rows.length * ch + 18;
+  el('rect', {x: 56, y: ly - 11, width: 14, height: 14, rx: 3, class: 'dg-hot'}, svg); el('text', {x: 76, y: ly, class: 'dg-l'}, svg, 'HOT');
+  el('rect', {x: 126, y: ly - 11, width: 14, height: 14, rx: 3, class: 'dg-warm'}, svg); el('text', {x: 146, y: ly, class: 'dg-l'}, svg, 'WARM');
+  el('text', {x: 10, y: ly + 34, class: 'dg-l'}, svg, 'Attention per layer is renormalised, then divided by the layer count.');
+  el('text', {x: 10, y: ly + 52, class: 'dg-l'}, svg, 'Each step still sums to 1. Cell colors are illustrative.');
+  el('line', {x1: 450, x2: 450, y1: 14, y2: 326, class: 'grid'}, svg);
+
+  const bx = 490;
+  el('text', {x: bx, y: 22, class: 'dg-t'}, svg, 'Sparse reads');
+  el('text', {x: bx, y: 40, class: 'dg-l'}, svg, 'each step, entries ranked by live importance');
+  const n = 26, bw = 12, gap = 4, base = 250, top = 70, cut = 3;
+  for (let i = 0; i < n; i++) {
+    const hgt = 150 * Math.exp(-i / 5.5) + 5, x = bx + i * (bw + gap);
+    if (i < cut) el('rect', {x, y: base - hgt, width: bw, height: hgt, rx: 2, style: 'fill:var(--fg2)'}, svg);
+    else el('rect', {x, y: base - hgt, width: bw, height: hgt, rx: 2, style: 'fill:none;stroke:var(--axis);stroke-width:1.5;stroke-dasharray:3 2'}, svg);
+  }
+  el('line', {x1: bx, x2: bx + n * (bw + gap), y1: base, y2: base, class: 'axis'}, svg);
+  const cx = bx + cut * (bw + gap) - gap / 2;
+  el('line', {x1: cx, x2: cx, y1: top - 10, y2: base + 6, class: 'dg-ln', 'stroke-dasharray': '4 3'}, svg);
+  el('text', {x: bx, y: top - 16, class: 'dg-s'}, svg, 'top 10% + newest entries');
+  el('text', {x: bx, y: base + 24, class: 'dg-l'}, svg, 'read: charged at the entry’s current tier');
+  el('text', {x: bx + 140, y: base - 60, class: 'dg-l'}, svg, 'skipped: no energy');
+  el('text', {x: bx + 140, y: base - 44, class: 'dg-l'}, svg, 'mass reported (2% to 4%)');
+  el('text', {x: bx, y: base + 44, class: 'dg-l'}, svg, 'Step 0 reads everything. Scorer sees true weights at zero cost.');
+})();
+
+/* Figure 14 */
+(function () {
+  const rows = D.m6.filter(r => r.split === 'TEST');
+  const by = Object.fromEntries(rows.map(r => [r.mode, r]));
+  const host = document.getElementById('f-m6modes');
+  const defs = [
+    {t: 'Flat ÷ static energy', f: r => r.ratio, kind: 'bar', fmt: v => v.toFixed(1) + '×'},
+    {t: 'Energy vs static (lower is better)', f: r => r.e, kind: 'div', lo: -25, hi: 10},
+    {t: 'Quality loss vs static (lower is better)', f: r => r.q, kind: 'div', lo: -5, hi: 15}
+  ];
+  defs.forEach(d => {
+    const col = html('div', {}, host); html('div', {class: 'panel-h'}, col, d.t);
+    const chart = html('div', {class: 'chart'}, col);
+    const tipFor = (m, r) => `<b>${MODE_NAME[m]}</b><br>flat ÷ static: ${r.ratio.toFixed(2)}×<br>skipped mass: ${r.skipped.toFixed(1)}%<br>energy vs static: ${sgn(r.e)}<br>quality vs static: ${sgn(r.q)}<br>moves: ${r.moves}<br>thresholds: ${r.px}× / ${r.dx}×`;
+    if (d.kind === 'bar') {
+      const max = Math.max(...MODES.map(([m]) => by[m].ratio));
+      mount(chart, w => hbars(chart, w, MODES.map(([m, l]) => ({label: l, value: by[m].ratio, color: 'var(--seg)', text: d.fmt(by[m].ratio), tip: tipFor(m, by[m])})), max, {lw: 96, vw: 52, aria: d.t}));
+    } else {
+      mount(chart, w => divbars(chart, w, MODES.map(([m, l]) => ({label: l, value: d.f(by[m]), tip: tipFor(m, by[m])})), d.lo, d.hi, {lw: 96, aria: d.t}));
+    }
+  });
+  const all = D.m6.slice();
+  tableView(document.getElementById('tv-m6'), ['mode', 'trace', 'split', 'flat ÷ static', 'skipped mass', 'promote / demote', 'energy vs static', 'quality vs static', 'moves'],
+    all.map(r => [MODE_NAME[r.mode], r.trace, r.split, r.ratio.toFixed(2) + '×', r.skipped.toFixed(1) + '%', r.px + '× / ' + r.dx + '×', sgn(r.e), sgn(r.q), r.moves]));
+})();
+
+/* Figure 15 */
+(function () {
+  const names = ['chart', 'scene', 'noise_label'];
+  const host = document.getElementById('f-m6traces');
+  const get = (m, t) => D.m6.find(r => r.mode === m && r.trace === t);
+  [['e', 'Energy vs static (lower is better)', -5, 12], ['q', 'Quality loss vs static (lower is better)', -14, 6]].forEach(([k, title, lo, hi]) => {
+    const col = html('div', {}, host); html('div', {class: 'panel-h'}, col, title);
+    const chart = html('div', {class: 'chart'}, col);
+    mount(chart, w => {
+      chart.textContent = '';
+      const lw = Math.min(104, w * 0.3), gh = 70, h = names.length * gh + 28, iw = w - lw - 30;
+      const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': title + ' per trace with per-layer entries'}, chart);
+      const L = k === 'e' ? -25 : lo, H = k === 'e' ? 12 : hi;
+      const X = v => lw + (v - L) / (H - L) * iw;
+      niceTicks(L, H, 4).forEach(v => {
+        el('line', {x1: X(v), x2: X(v), y1: 0, y2: h - 22, class: v === 0 ? 'axis' : 'grid'}, svg);
+        el('text', {x: X(v), y: h - 6, 'text-anchor': 'middle', class: 't'}, svg, (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v) + '%');
+      });
+      names.forEach((n, i) => {
+        const y = i * gh + 6, split = get('layer_dense', n).split;
+        el('text', {x: lw - 8, y: y + 20, 'text-anchor': 'end', class: 'tl'}, svg, n);
+        el('text', {x: lw - 8, y: y + 36, 'text-anchor': 'end', class: 't'}, svg, split === 'TEST' ? 'held out' : 'train');
+        [['layer_dense', false], ['layer_sparse10', true]].forEach(([m, ring], j) => {
+          const row = get(m, n), v = row[k], yy = y + j * 26, x0 = X(0), x1 = X(v);
+          el('rect', {x: Math.min(x0, x1), y: yy, width: Math.max(2, Math.abs(x1 - x0)), height: 20, rx: 3, style: ring ? 'fill:none;stroke:var(--s3);stroke-width:2' : 'fill:var(--s3)'}, svg);
+          const right = v >= 0;
+          el('text', {x: right ? x1 + 6 : x1 - 6, y: yy + 15, 'text-anchor': right ? 'start' : 'end', class: 'tv'}, svg, sgn(v));
+          const hit = el('rect', {x: lw, y: yy - 2, width: iw, height: 24, style: 'fill:transparent'}, svg);
+          hover(hit, `<b>${n}</b> · ${MODE_NAME[m]}<br>energy vs static: ${sgn(row.e)}<br>quality vs static: ${sgn(row.q)}<br>moves: ${row.moves}<br>WARM attention: static ${row.warm_s.toFixed(1)}%, dynamic ${row.warm_d.toFixed(1)}%`);
+        });
+      });
+    });
+  });
+})();
+
+/* Figure 16 */
+(function () {
+  const host = document.getElementById('f-int4');
+  const K = D.int4.K, V = D.int4.V, n = K.length;
+  mount(host, w => {
+    host.textContent = '';
+    const h = 280, m = {l: 54, r: 44, t: 16, b: 44}, iw = w - m.l - m.r, ih = h - m.t - m.b, ymax = 0.14;
+    const svg = el('svg', {viewBox: `0 0 ${w} ${h}`, width: w, height: h, role: 'img', 'aria-label': 'Measured INT4 relative error by layer for K and V, against the assumed 0.05'}, host);
+    const X = i => m.l + (i + 0.5) / n * iw, Y = v => m.t + ih - v / ymax * ih;
+    [0, 0.03, 0.06, 0.09, 0.12].forEach(v => {
+      el('line', {x1: m.l, x2: w - m.r, y1: Y(v), y2: Y(v), class: 'grid'}, svg);
+      el('text', {x: m.l - 8, y: Y(v) + 4, 'text-anchor': 'end', class: 't'}, svg, v.toFixed(2));
+    });
+    [0, 5, 10, 15, 20, 25, 29].forEach(i => el('text', {x: X(i), y: m.t + ih + 18, 'text-anchor': 'middle', class: 't'}, svg, i));
+    el('line', {x1: m.l, x2: w - m.r, y1: m.t + ih, y2: m.t + ih, class: 'axis'}, svg);
+    el('text', {x: m.l + iw / 2, y: h - 6, 'text-anchor': 'middle', class: 'tl'}, svg, 'layer index');
+    el('text', {x: 14, y: m.t + ih / 2, 'text-anchor': 'middle', class: 'tl', transform: `rotate(-90 14 ${m.t + ih / 2})`}, svg, 'relative L2 error, INT4');
+    el('line', {x1: m.l, x2: w - m.r, y1: Y(0.05), y2: Y(0.05), style: 'stroke:var(--accent);stroke-width:2;stroke-dasharray:6 4'}, svg);
+    el('text', {x: m.l + 6, y: Y(0.05) - 7, class: 'tv'}, svg, 'assumed 0.05');
+    [[K, 'var(--s1)', 'K'], [V, 'var(--s2)', 'V']].forEach(([a, c, name]) => {
+      el('polyline', {points: a.map((v, i) => `${X(i)},${Y(v)}`).join(' '), style: `fill:none;stroke:${c};stroke-width:2`}, svg);
+      el('text', {x: X(n - 1) + 8, y: Y(a[n - 1]) + 4, class: 'tv'}, svg, name);
+      a.forEach((v, i) => {
+        const hit = el('circle', {cx: X(i), cy: Y(v), r: 8, style: 'fill:transparent'}, svg);
+        hover(hit, `<b>layer ${i}</b><br>${name}: ${v.toFixed(3)}<br>assumed: 0.050`);
+      });
+    });
+  });
+  tableView(document.getElementById('tv-int4'), ['tensor', 'scheme', 'tokens', 'mean relative L2 error', 'rows'],
+    D.int4.summary.map(r => [r.t, r.scheme === 'tok_g32' ? 'group 32' : 'group 64', r.who, r.err.toFixed(3), r.n]));
+})();
+</script>

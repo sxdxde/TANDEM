@@ -47,7 +47,32 @@ real = [dict(trace=r["trace"], split=r["split"], policy=r["policy"], energy=fl(r
              promos=int(r["promos"]), demos=int(r["demos"]), e=fl(r["energy_vs_static_pct"]),
              q=fl(r["quality_vs_static_pct"])) for r in rows("real_trace_results.csv")]
 
-data = dict(policies=policies, sweep=sweep, damping=damping, ts=ts, real=real)
+m6 = [dict(mode=r["mode"], trace=r["trace"], split=r["split"], ratio=fl(r["flat_over_static_energy"]),
+           skipped=fl(r["skipped_pct"]), e=fl(r["dyn_energy_vs_static_pct"]), q=fl(r["dyn_quality_vs_static_pct"]),
+           moves=int(r["moves"]), px=fl(r["chosen_promote_x"]), dx=fl(r["chosen_demote_x"]),
+           warm_s=fl(r["static_warm_mass_pct"]), warm_d=fl(r["dyn_warm_mass_pct"]))
+      for r in rows("m6_results.csv")]
+
+# measured INT4 error: per-layer mean (g32), and scheme summary
+from collections import defaultdict
+import statistics as st
+_i = rows("int4_error.csv")
+_layer = defaultdict(list)
+_sum = defaultdict(list)
+for r in _i:
+    v = (fl(r["err_visual"]) + fl(r["err_text"])) / 2
+    if r["scheme"] == "tok_g32":
+        _layer[(r["tensor"], int(r["layer"]))].append(v)
+    _sum[(r["tensor"], r["scheme"], "visual")].append(fl(r["err_visual"]))
+    _sum[(r["tensor"], r["scheme"], "text")].append(fl(r["err_text"]))
+nl = 1 + max(int(r["layer"]) for r in _i)
+int4 = dict(
+    K=[round(st.mean(_layer[("K", l)]), 4) for l in range(nl)],
+    V=[round(st.mean(_layer[("V", l)]), 4) for l in range(nl)],
+    summary=[dict(t=k[0], scheme=k[1], who=k[2], err=round(st.mean(v), 4), n=len(v)) for k, v in sorted(_sum.items())],
+)
+
+data = dict(policies=policies, sweep=sweep, damping=damping, ts=ts, real=real, m6=m6, int4=int4)
 html = (Path(__file__).parent / "template.html").read_text()
 html = html.replace("/*__DATA__*/null", json.dumps(data, separators=(",", ":")))
 (Path(__file__).parent / "index.html").write_text(html)

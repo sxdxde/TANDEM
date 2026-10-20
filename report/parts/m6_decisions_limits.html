@@ -1,0 +1,146 @@
+<section id="m6">
+  <h2>6 · M6: per-layer entries, sparse reads, measured INT4 error</h2>
+  <div class="prose">
+    <p>M5 left three open questions. Does averaging over layers hide a placement win? Does the dynamic policy still matter if a system reads only the entries that matter? And how wrong is the assumed INT4 error? M6 answers each. The protocol is M5's, fixed in advance: thresholds in multiples of uniform attention, chosen on chart and scene as the lowest energy with mean quality no worse than static, then tested on the held-out noise_label trace. The run is 408 simulations (<code>results/m6_sweep.csv</code>).</p>
+  </div>
+
+  <h3>What we built</h3>
+  <figure class="diagram">
+    <div class="scroll-x">
+    <svg id="d-m6" viewBox="0 0 900 340" width="900" height="340" style="min-width:760px" role="img" aria-label="Left: per-layer entry layout, one entry per token and layer, each with its own tier. Right: sparse access, where only the top 10 percent of entries by live importance are read and charged, and the tail is skipped."></svg>
+    </div>
+    <figcaption><b>Figure 13.</b> Left: one KV entry per token and layer, so the same token can be HOT in one layer and WARM in another (cell colors are illustrative). Right: sparse reads. Each step ranks entries by live importance and reads the top 10% plus entries created in the last step. The tail costs no energy, and its attention mass is reported as skipped.</figcaption>
+  </figure>
+  <div class="prose">
+    <ul>
+      <li><b>Sparse access.</b> Step 0 is dense. After that only the top 10% of active entries by live importance EMA, plus entries created in the last step, are read. Skipped attention mass is reported and costs no energy. It does not depend on placement (tested).</li>
+      <li><b>Assumption:</b> the importance estimate sees the true attention weights at zero cost. That is an upper bound on what a real approximate scorer could do.</li>
+      <li><b>Per-layer entries.</b> One entry per token and layer. Each layer's attention is renormalised and divided by the number of layers, so a step's mass still sums to 1. Entry size matches a single-entry token, so absolute energies are about 30× the layer-averaged ones. Compare ratios only.</li>
+      <li>Quality is linear in attention weights, so static policies score identically in both views (0.0031 on chart). Per-layer entries change only what the dynamic policy can do.</li>
+    </ul>
+  </div>
+
+  <h3>Results</h3>
+  <div class="tbl wide"><table>
+    <thead><tr><th>Mode</th><th class="n">flat ÷ static energy</th><th class="n">skipped mass</th><th class="n">chosen promote / demote</th><th class="n">held-out energy vs static</th><th class="n">held-out quality vs static</th></tr></thead>
+    <tbody>
+      <tr><td>layer-averaged, dense (the M5 setup)</td><td class="n">9.3×</td><td class="n">0%</td><td class="n">2.0× / 0.4×</td><td class="n">−14.4%</td><td class="n">+11.9%</td></tr>
+      <tr><td>layer-averaged, sparse 10%</td><td class="n">1.6×</td><td class="n">3.2% to 3.6%</td><td class="n">8.0× / 0.02×</td><td class="n">+0.2% (no moves)</td><td class="n">0%</td></tr>
+      <tr><td>per-layer, dense</td><td class="n">9.3×</td><td class="n">0%</td><td class="n">4.0× / 0.4×</td><td class="n">−20.0%</td><td class="n">+0.8%</td></tr>
+      <tr><td>per-layer, sparse 10%</td><td class="n">1.9× to 2.0×</td><td class="n">2.1% to 2.3%</td><td class="n">8.0× / 0.2×</td><td class="n">+3.7%</td><td class="n">−0.2%</td></tr>
+    </tbody>
+  </table></div>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 14 · Four modes on the held-out trace (noise_label)</div>
+    <div class="legend"><span><i style="background:var(--seg)"></i>substrate (no policy)</span><span><i style="background:var(--s3)"></i>dynamic policy vs static</span></div>
+    <div class="panels" id="f-m6modes"></div>
+    <details class="table-view"><summary>Table view, all 12 runs</summary><div class="tv-wrap" id="tv-m6"></div></details>
+    <figcaption><b>Sparse reads shrink what tiering is worth. Per-layer entries give the dynamic policy something to do.</b> In the left panel, 10% sparse reads cut the flat-over-static energy ratio from 9.3× to under 2×. In the middle panel only the per-layer dense mode saves a meaningful amount of energy. In the right panel, the held-out quality change is within about one percent in the three new modes, against +11.9% for the M5 setup. Here "avg" means layer-averaged.</figcaption>
+  </figure>
+
+  <figure class="chart">
+    <div class="fig-title">Figure 15 · Per-layer entries on each trace, dynamic against static</div>
+    <div class="legend"><span><i style="background:var(--s3)"></i>per-layer, dense</span><span style="color:var(--s3)"><i class="ring"></i>per-layer, sparse 10%</span></div>
+    <div class="panels" id="f-m6traces"></div>
+    <figcaption><b>Dense reads save about 20% energy on all three traces.</b> Quality moves −2.0%, −10.3% and +0.8% on chart, scene and noise_label, and each session makes between 1,163 and 1,423 tier moves. With sparse reads the energy result turns into +6.5%, +7.5% and +3.7%, because the HOT text entries that dynamic demotes are rarely read, while about a thousand moves still pay the move cost. Negative is better on both axes.</figcaption>
+  </figure>
+
+  <div class="prose">
+    <ul>
+      <li><b>Layer-averaged and sparse:</b> the dynamic policy has nothing to do. The chosen thresholds never trigger (0 to 1 moves per session), so static modality is already as good as it gets.</li>
+      <li><b>Per-layer and dense:</b> the first dynamic win on real traces, about −20% energy with quality roughly neutral.</li>
+      <li><b>Per-layer and sparse:</b> energy +3.7% to +7.5%, quality −0.2% to −7.8%. The benefit disappears or reverses at the default 10× move cost.</li>
+      <li>Exploratory and unsaved (an ad-hoc run on the chart trace, layer-averaged): flat ÷ static energy was 5.4× at 50% top-k, 2.5× at 20%, 1.6× at 10% and 1.4× at 5%.</li>
+    </ul>
+  </div>
+
+  <div class="flag" style="max-width:78ch"><b>Strict rule, marginal miss.</b> On the held-out trace the per-layer dense configuration saves 20.0% energy and loses 0.8% on quality against static. The rule fixed in advance was quality no worse than static, so this misses by 0.8%. We report it as a miss and do not round it to zero. Quality was −2.0% and −10.3% on the two training traces.</div>
+
+  <div class="pending" style="border-style:solid">
+    <p style="margin:0"><b>Mechanism: arithmetic inference, not instrumented.</b> In the static per-layer baseline the roughly 1.3k HOT text entries (44 tokens × 30 layers) cost about 170M of about 380M pJ. The dynamic policy saves about 78M pJ, roughly half of that. The WARM share of attention barely moves (6.2% to 6.1%). From these totals, the saving comes mostly from demoting text entries in layers where text is unimportant, plus a few promotions of visual entries in layers that attend to them. It does not come mainly from rescuing salient visual tokens. This is the same text-demotion channel seen on the synthetic trace. We did not break the saving down per entry to confirm it.</p>
+  </div>
+
+  <h3>Measured INT4 error</h3>
+  <div class="prose">
+    <p>We quantized SmolVLM's prefill K and V per token to INT4 (min-max) and measured relative L2 error, over 30 layers and 3 images (<code>results/int4_error.csv</code>, 360 rows). At group size 32 the error is 0.102 for K and 0.081 for V. At group size 64 it is 0.134 and 0.094. Visual and text tokens agree within about 1%.</p>
+    <p><b>The assumed 0.05 was about half the measured value of roughly 0.09.</b> We left the config at 0.05. Quality loss is the sum of attention weight times error, so it is linear in the error and the same factor applies to every policy. Every ratio against static is unchanged, and so are the threshold choices, since the selection rule compares ratios. Only absolute quality values scale, by about 1.8×. Read any absolute quality number in this report that way. Keeping 0.05 means the committed results still reproduce.</p>
+    <p>Two limits. We did not compute a per-channel variant for K, because a guard skipped it for token counts that are not a multiple of 64. And relative L2 error stands in for quality loss here, the same proxy the rest of the report uses.</p>
+  </div>
+  <figure class="chart">
+    <div class="fig-title">Figure 16 · Measured INT4 error by layer against the assumed 0.05</div>
+    <div id="f-int4"></div>
+    <details class="table-view"><summary>Table view</summary><div class="tv-wrap" id="tv-int4"></div></details>
+    <figcaption><b>Every layer sits near 0.09, well above the assumed 0.05.</b> Values are relative L2 error at group size 32, averaged over three images and over visual and text tokens. K and V are shown separately.</figcaption>
+  </figure>
+</section>
+
+<section id="decisions">
+  <h2>7 · Decision log</h2>
+  <div class="prose"><p>The user told us to automate every decision, so most entries are Claude's. The one decision the user made directly is marked.</p></div>
+  <div class="tbl wide"><table>
+    <thead><tr><th>Decision</th><th>Why</th><th>Evidence</th><th>By</th></tr></thead>
+    <tbody>
+      <tr><td>Add a quality penalty for WARM reads</td><td>Energy-only comparison was degenerate: all-WARM won</td><td>All-WARM −78.6% energy, +2.6% latency vs static (M4 step 1)</td><td>User, from two options</td></tr>
+      <tr><td>Set WARM quant error to 0.05</td><td>Needed a number to make the penalty work</td><td>None at the time. Flagged as an assumption, later measured at about 0.09 (M6)</td><td>Claude</td></tr>
+      <tr><td>Report quality as an axis, not a scalar cost</td><td>Weights between energy and quality are a judgment call</td><td>Code design; policies do not see quality</td><td>Claude</td></tr>
+      <tr><td>Default to warmup 2, dwell 0</td><td>Dominates undamped on both axes, best gain per energy</td><td>Damping sweep, 5 seeds (Figure 7)</td><td>Claude, post hoc</td></tr>
+      <tr><td>Reject dwell 20 as default</td><td>Gives away 11 points of quality gain, batches moves at step 19</td><td>Damping sweep, timeline</td><td>Claude</td></tr>
+      <tr><td>Leave bias-corrected EMA off</td><td>Different operating point, thresholds not recalibrated</td><td>Median +78.8% energy, −61.1% quality vs +55.9%, −49.3%</td><td>Claude</td></tr>
+      <tr><td>Keep <code>damp_promotions</code> true</td><td>False gave identical results at dwell 0 and no gain elsewhere</td><td>Damping sweep</td><td>Claude</td></tr>
+      <tr><td>Do not adopt promote 0.008 / demote 0.001</td><td>Best efficiency, but efficiency is a heuristic</td><td>+35% energy, −38% quality loss</td><td>Claude</td></tr>
+      <tr><td>Use SmolVLM-256M and local images</td><td>Small enough for the laptop (M1 Pro, 16 GB RAM, 33 GB free disk); no image downloads</td><td>Session environment check</td><td>Claude</td></tr>
+      <tr><td>Install torch and transformers as an optional <code>vlm</code> extra</td><td>Keeps simulator and policies free of the deep-learning stack</td><td><code>pyproject.toml</code>, torch-free <code>real_trace.py</code></td><td>Claude</td></tr>
+      <tr><td>Last prompt token is decode step 0's query</td><td>Matches the simulator's prefill plus decode-entry model exactly</td><td>3 tests on the adapter</td><td>Claude</td></tr>
+      <tr><td>Express thresholds as multiples of uniform attention on real traces</td><td>Synthetic thresholds never fire on about 900 entries</td><td>Uniform ≈ 0.0011; p99 visual EMA ≈ 0.0008</td><td>Claude</td></tr>
+      <tr><td>Fix train and test split before running</td><td>Avoid tuning thresholds to the trace they are scored on</td><td>Train chart and scene, test noise_label</td><td>Claude</td></tr>
+      <tr><td>Report the held-out failure as a failure</td><td>The criterion was set in advance and it was not met</td><td>+11.9% quality loss on noise_label</td><td>Claude</td></tr>
+      <tr><td>Sparse reads: top 10% by live EMA plus entries from the last step, step 0 dense</td><td>A simple model of a system that skips low-attention tokens</td><td>Skipped mass 2.1% to 3.6%, placement-independent (tested)</td><td>Claude</td></tr>
+      <tr><td>Give the importance estimate true weights at zero cost under sparse reads</td><td>Isolates placement from scorer quality, at the price of an upper bound</td><td>Stated as an assumption</td><td>Claude</td></tr>
+      <tr><td>One entry per token and layer, attention divided by layer count</td><td>Keeps each step's mass at 1 so quality stays comparable</td><td>Static quality identical in both views (0.0031 on chart)</td><td>Claude</td></tr>
+      <tr><td>Reuse the M5 selection protocol for M6</td><td>Keeps results comparable and avoids new degrees of freedom</td><td>Same train and test traces and rule</td><td>Claude</td></tr>
+      <tr><td>Keep quant error at 0.05 in the config despite measuring 0.09</td><td>Ratios are unaffected and committed results stay reproducible</td><td>Quality is linear in the error; read absolute values × about 1.8</td><td>Claude</td></tr>
+      <tr><td>Report the +0.8% held-out quality as a marginal miss</td><td>The rule was quality no worse than static</td><td><code>results/m6_results.csv</code></td><td>Claude</td></tr>
+      <tr><td>Label the mechanism as inference</td><td>The 170M and 78M pJ figures are arithmetic from totals, not instrumented</td><td><code>NOTES.md</code>, M6 observations</td><td>Claude</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="limits">
+  <h2>8 · Limits and next steps</h2>
+  <h3>Limits</h3>
+  <div class="prose">
+    <ul>
+      <li>The real-trace evidence is thin: one 256M model, three generated images, 64 decode steps, selection on two traces and one held-out trace. Natural photos, documents and larger models are untested.</li>
+      <li>The synthetic M4 conclusions describe the synthetic trace. They should not be read as properties of vision-language models.</li>
+      <li>The config still carries the assumed 0.05 INT4 error. Measured error is about 0.09, so absolute quality values are about 1.8× too small. Ratios against static are unaffected. The per-channel K variant was not measured.</li>
+      <li>Latency is serialized total work, not wall-clock time.</li>
+      <li>Per-layer entries average over heads within a layer. Per-head structure is still hidden.</li>
+      <li>Sparse reads assume a perfect importance estimate at zero cost, which is an upper bound for any real scorer. The 50%, 20% and 5% top-k numbers come from an unsaved ad-hoc run.</li>
+      <li>The per-layer dense gain needs about a thousand tier moves per session, and it narrowly misses the strict quality rule.</li>
+      <li>The mechanism behind the per-layer gain is inferred from totals, not instrumented.</li>
+      <li>No quality-aware policy exists yet. The policy never sees quality.</li>
+      <li>The planned oracle comparison against ground-truth top-k attended tokens is not done.</li>
+    </ul>
+  </div>
+  <h3>Next steps</h3>
+  <div class="prose">
+    <ul>
+      <li>A layer-aware static prior (modality × layer) as a stronger baseline than static modality. The per-layer dynamic win looks like a layer effect, so this baseline may capture it without any moves.</li>
+      <li>Per-head entries.</li>
+      <li>A real approximate importance estimator for sparse reads, in place of true weights.</li>
+      <li>Sweep move cost and top-k fraction on real traces.</li>
+      <li>Natural images, documents and a larger vision-language model.</li>
+      <li>The oracle top-k comparison from the M5 plan, and a quality-aware promotion rule.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="conclusion">
+  <h2>9 · Conclusion</h2>
+  <div class="prose">
+    <p>A fixed split by modality does most of the work. On real traces it cuts energy by about 90% against keeping everything HOT, for a quality loss near 0.003, and sparse reads shrink the remaining gap between flat and static from about 9.3× to under 2×.</p>
+    <p>The dynamic policy's synthetic trade-off (about −49% quality loss for about +55% energy) did not replicate. The synthetic trace sent about 68% of attention to WARM, and real traces send about 6%. On real traces its value is conditional. With per-layer entries and dense reads it saves about 20% energy at roughly neutral quality, narrowly missing the strict rule, and likely by demoting text entries rather than rescuing visual ones. With sparse reads that benefit vanishes, and it needs about a thousand moves per session.</p>
+    <p>The INT4 error we assumed was about half the measured value. That does not change any ratio. The next experiment worth running is a layer-aware static prior, since it would show whether the dynamic policy's remaining gain needs dynamics at all.</p>
+  </div>
+</section>
