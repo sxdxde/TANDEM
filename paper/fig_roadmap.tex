@@ -1,0 +1,30 @@
+\begin{tikzpicture}[font=\footnotesize, >=Stealth,
+  q/.style={draw, rounded corners=2pt, text width=62mm, align=left, inner sep=3pt, fill=white, line width=0.6pt},
+  f/.style={draw, rounded corners=2pt, text width=74mm, align=left, inner sep=3pt, line width=0.6pt},
+  tag/.style={font=\bfseries\footnotesize, text width=9mm, align=center},
+  nx/.style={font=\scriptsize\itshape, text=black!65, text width=95mm, align=left}]
+\def\dy{-16.2mm}
+\node[tag] (t1) at (0,0) {E1};
+\node[q, right=1mm of t1, anchor=west] (q1) {Synthetic trace: does hysteretic promote/demote beat static modality, once moves are paid for?};
+\node[f, right=3mm of q1, fill=okc!12, draw=okc!70!black] (f1) {Needs a quality term (all-\warm{} wins otherwise); trades $+55\%$ energy for $-49\%$ quality loss.};
+\node[tag] (t2) at (0,\dy) {E2};
+\node[q, right=1mm of t2, anchor=west] (q2) {Real SmolVLM attention: does it replicate?};
+\node[f, right=3mm of q2, fill=hotc!14, draw=hotc!80!black] (f2) {\textbf{No.} Visual tokens get $\sim$6\% of attention; held-out quality fails ($+11.9\%$).};
+\node[tag] (t3) at (0,2*\dy) {E3};
+\node[q, right=1mm of t3, anchor=west] (q3) {Per-(token, layer) entries, sparse reads, measured INT4 error.};
+\node[f, right=3mm of q3, fill=okc!12, draw=okc!70!black] (f3) {Win appears: $-20\%$ energy, quality neutral, dense reads only. INT4 error $0.09$, not $0.05$.};
+\node[tag] (t4) at (0,3*\dy) {E4};
+\node[q, right=1mm of t4, anchor=west] (q4) {Is it just a layer/role prior? A static profile should match it.};
+\node[f, right=3mm of q4, fill=hotc!14, draw=hotc!80!black] (f4) {\textbf{Falsified.} Static is $16$--$26\%$ worse in quality at equal energy; per-entry signal needed.};
+\node[tag] (t5) at (0,4*\dy) {E5};
+\node[q, right=1mm of t5, anchor=west] (q5) {Scale: 42 images, 3 kinds, 2 model sizes, pre-specified pass rule.};
+\node[f, right=3mm of q5, fill=okc!12, draw=okc!70!black] (f5) {$-22.3\%$ / $-23.4\%$ energy; transfers; break-even $\sim\!50\times$; fails for sparse reads.};
+\node[tag] (t6) at (0,5*\dy) {E6};
+\node[q, right=1mm of t6, anchor=west] (q6) {Objection 1: the policy used the \emph{true} attention for free.};
+\node[f, right=3mm of q6, fill=okc!12, draw=okc!70!black] (f6) {Robust to noise, stale or sampled signals ($-18.6$ to $-21.8\%$); fails with one score per token ($-7.6\%$).};
+\node[tag] (t7) at (0,6*\dy) {E7};
+\node[q, right=1mm of t7, anchor=west] (q7) {Objection 2: is the quality proxy real? Apply INT4 in the actual model.};
+\node[f, right=3mm of q7, fill=okc!12, draw=okc!70!black] (f7) {Real INT4: output KL $21.8\%$ below static, $9.4\times$ below random placement; proxy $\rho{=}0.81$.};
+\foreach \a/\b/\txt in {1/2/{synthetic result relies on an assumed attention profile},2/3/{real attention was averaged over layers, hiding structure},3/4/{what explains the win? first guess: a layer effect},4/5/{3 images, 1 model, 1 held-out trace},5/6/{oracle importance},6/7/{proxy, not measurement}}{
+  \draw[->, line width=0.7pt] ($(q\a.south west)+(8mm,0)$) -- node[right=1pt, font=\scriptsize\itshape, text=black!65, inner sep=0.5pt] {\txt} ($(q\b.north west)+(8mm,0)$);}
+\end{tikzpicture}

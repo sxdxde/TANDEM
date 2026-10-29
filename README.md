@@ -117,6 +117,14 @@ caveats in `NOTES.md`. A cross-validated layer/role-aware *static* baseline
 energy (about +16..+26% worse quality), so its advantage on real dense-read
 traces comes from per-entry information, not a layer prior.
 
+**Milestone 7** (scale-up: 42 images, SmolVLM-256M and 500M, leave-one-trace-out, bootstrap CIs) establishes the
+dense-read per-layer dynamic win under a pass rule fixed in advance: -22.3% (256M) / -23.4% (500M) energy vs static
+modality at neutral quality, break-even reconfiguration cost about 50x, thresholds transfer across sizes, and no win
+under sparse (top-10%) reads. **Milestone 8** checks it against a non-oracle importance signal (robust to noise,
+staleness and sampling, but not to one score per token) and against the real model's output with INT4 actually
+applied (dynamic placement changes the next-token distribution 21.8% less than static, 9.4x less than random
+placement of the same size). The write-up is in `paper/` (`main.tex`, `main.pdf`).
+
 ## Repository structure
 
 ```
@@ -141,11 +149,13 @@ kvtier-memcentric/
     extract_vlm_layer_trace.py, run_m6.py, measure_int4_error.py                            # M6
     run_layer_aware.py                                                                      # M6b
     make_dataset.py, extract_many.py, run_m7.py, analyze_m7.py, run_m7_mechanism.py         # M7
+    run_m7_estimators.py, analyze_m8.py, validate_real_output.py, run_m7_part2.sh            # M8
   tests/                    # pytest (61+)
   data/                     # M7 image set (manifest.csv; COCO photos are third-party, re-downloadable)
   traces/                   # real attention traces (*.npz; M7 under traces/<model-tag>/)
   results/                  # CSVs and plots
-  report/                   # HTML report source (build.py + template.html + parts/)
+  report/                   # HTML report source (build.py + template.html + parts/), M1-M6b
+  paper/                    # research article (LaTeX), figure script, figures
 ```
 
 ## Setup

@@ -36,13 +36,19 @@ class ImportanceMonitor:
             entry.observed_steps = 0
             entry.steps_since_move = 0
 
-    def update(self, active: dict[int, TokenKV], weights: dict[int, float]) -> None:
-        """Update every entry that received attention this step."""
+    def update(self, active: dict[int, TokenKV], weights: dict[int, float],
+               decay: float | None = None) -> None:
+        """Update every entry that received attention this step.
+
+        ``decay`` overrides ``ema_decay`` for this call (used by estimators that observe
+        only every m-th step, which keep the EMA time constant by passing ``ema_decay ** m``).
+        """
+        d = self.ema_decay if decay is None else decay
         for pos, w in weights.items():
             entry = active[pos]
             # Track the raw EMA internally; expose the (optionally corrected)
             # value as ``importance``.
-            raw = self.ema_decay * entry.raw_importance + (1.0 - self.ema_decay) * w
+            raw = d * entry.raw_importance + (1.0 - d) * w
             entry.raw_importance = raw
             entry.observed_steps += 1
             if self.bias_correct:

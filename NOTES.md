@@ -358,8 +358,49 @@ Widening the grid did not change the 10x dense result: 8/0.4 was a real optimum,
 Verdict: the dense-read per-layer dynamic win replicates across two model sizes and three image kinds and
 survives a >10x reconfiguration cost. It is a dense-read result only.
 Not done: SmolVLM-2.2B (planned in the overnight script; dropped as low marginal value), per-head entries,
-other model families, real-hardware cost validation, a non-oracle importance estimator. Importance is oracle
-attention; reconfiguration cost is a modelled multiplier, not measured.
+other model families, real-hardware cost validation. (Non-oracle importance and real-output validation: see M8.)
+Reconfiguration cost is a modelled multiplier, not measured.
+
+## M8: non-oracle importance (E6) and real-output validation of the quality proxy (E7)
+Motivation: after M7 the two strongest objections were (1) the policy sees the true attention of every
+entry for free, (2) "quality" is an attention-weighted proxy, not a measurement of the model's output.
+Code: `kvtier/estimators.py` (+ `estimator=` / `tier_log=` hooks in `simulator.py`, `decay=` in `monitor.py`;
+`tests/test_estimators.py`), `experiments/run_m7_estimators.py`, `experiments/analyze_m8.py`,
+`experiments/validate_real_output.py`, `paper/make_figures.py`. Results: `results/m8_*`.
+
+E6 (256M, 42 traces, dense, 10x, leave-one-out over a 10-config grid; oracle row reproduces M7 exactly):
+| signal | energy vs static | quality vs static |
+|---|---|---|
+| oracle | -22.3% | -2.5% |
+| log-normal noise sigma .25 / .5 / 1 | -22.1 / -21.6 / -21.7% | -2.9 / -4.0 / -0.8% |
+| sampled every 2nd / 4th / 8th step | -20.4 / -20.6 / -18.6% | -6.0 / -0.5 / -0.6% |
+| delayed 1 / 4 steps | -21.9 / -20.4% | -1.7 / -0.9% |
+| one score per token (layer mean) | -7.6% [-9.0,-6.1] | -4.3% |
+| token-shared + every 4th step | -10.2% | -1.0% |
+| noise .5 + every 4th step | -20.2% | -1.5% |
+Reading: the saving survives a noisy / stale / sampled per-entry signal (all but the token-shared rows meet the
+M7 criterion); collapsing importance to one score per token loses most of it (below the 10% bar). At the oracle's
+8/0.4 the token-shared signal gives -18.7% energy but +12.8% quality loss. All estimators are free here: no
+energy is charged for computing them, so the oracle's saving is also the upper bound on estimator overhead.
+Noise is mean-inflating log-normal (sigma 1 -> 1.65x); thresholds are re-selected per estimator.
+
+E7 (SmolVLM-256M, 42 images, 64 teacher-forced steps; the replay reproduced the saved text on 42/42):
+simulator tier schedules are replayed on the real model, WARM entries' cached K and V replaced by INT4 round
+trips (g32), KL(full || policy) of the next-token distribution:
+| placement | INT4 entries | KL (nats) | top-1 agreement |
+|---|---|---|---|
+| static modality | 91.8% | 0.00382 | 0.976 |
+| dynamic (8/0.4) | 94.9% | 0.00291 | 0.977 |
+| random, same INT4 count per step | 94.9% | 0.01946 | 0.930 |
+| all INT4 | 100% | 0.02064 | 0.929 |
+- Dynamic has 21.8% lower KL than static per image (95% CI 15.3-28.1%), lower on 37/42 images; random placement
+  with the same INT4 count is 9.4x worse than dynamic (CI 7.8-11.1x), worse on all 42 images.
+- Proxy vs measured KL: Spearman 0.81 over 168 points (Pearson on logs 0.88), but 0.49 within static+dynamic
+  only; per-image sign of the dynamic-vs-static difference agrees on 29/42. The proxy predicts -2.5%, the
+  measurement is -21.8%: the proxy is ordinally right but understates the advantage.
+- Caveats: top-1 agreement does not separate dynamic from static; INT4 effects on this model are small in
+  absolute terms (all-INT4 keeps 93% agreement); one model, one INT4 scheme, KL not benchmark accuracy.
+Paper: `paper/main.tex` (build: `cd paper && pdflatex main.tex` twice; figures: `.venv/bin/python paper/make_figures.py`).
 
 ## Open questions / caveats
 - Synthetic M4 conclusions did not replicate on real traces (see M5); treat the M4

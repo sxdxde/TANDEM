@@ -70,8 +70,17 @@ def run_session(
     ema_decay: float = DEFAULT_EMA_DECAY,
     bias_correct_ema: bool = False,
     sparse: SparseAccess | None = None,
+    estimator=None,
+    tier_log: list | None = None,
 ) -> SessionMetrics:
-    """Simulate one trace session under ``policy``, returning aggregated metrics."""
+    """Simulate one trace session under ``policy``, returning aggregated metrics.
+
+    ``estimator`` (see ``estimators.py``) sits between the true attention weights and the importance
+    monitor: the policy then acts on an imperfect signal while quality and access costs are still
+    charged with the true weights. ``None`` = oracle (M3-M7 behaviour). If ``tier_log`` is a list, the
+    set of WARM entry positions at the moment of each step's access is appended to it (used to replay
+    a policy's placement on the real model in ``validate_real_output.py``).
+    """
     tiers = tiers if tiers is not None else {t: get_tier(t) for t in Tier}
     reconfig_manager = reconfig_manager or ReconfigurationManager(hot=tiers[Tier.HOT])
     monitor = ImportanceMonitor(ema_decay=ema_decay, bias_correct=bias_correct_ema)
@@ -112,6 +121,9 @@ def run_session(
             warm_mass = 0.0
             skipped_mass = 0.0
 
+            if tier_log is not None:
+                tier_log.append({p for p, e in active.items() if e.tier == Tier.WARM})
+
             read: set[int] | None = None
             if sparse is not None and step.step > 0:
                 k = max(1, round(sparse.top_k_fraction * len(active)))
@@ -138,7 +150,12 @@ def run_session(
 
             yield env.timeout(step_latency)
 
-            monitor.update(active, step.attention_weights)
+            if estimator is None:
+                monitor.update(active, step.attention_weights)
+            else:
+                seen, decay = estimator.observe(step.step, step.attention_weights, ema_decay)
+                if seen is not None:
+                    monitor.update(active, seen, decay)
             for entry in active.values():
                 entry.steps_since_move += 1
 

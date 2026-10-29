@@ -1,0 +1,286 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=2.35cm,top=2.4cm,bottom=2.4cm]{geometry}
+\usepackage[expansion=false]{microtype}
+\usepackage{graphicx,booktabs,multirow,amsmath,amssymb,xcolor,enumitem,caption,subcaption}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric,backgrounds}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\setlist{itemsep=1pt,topsep=3pt,parsep=0pt}
+\setlength{\parskip}{3pt}
+\renewcommand{\arraystretch}{1.08}
+
+\definecolor{hotc}{HTML}{D9622B}
+\definecolor{warmc}{HTML}{3B6FB6}
+\definecolor{okc}{HTML}{2A9D8F}
+\definecolor{greyc}{HTML}{8A8A8A}
+\newcommand{\hot}{\textsc{hot}}
+\newcommand{\warm}{\textsc{warm}}
+\newcommand{\pj}{\,pJ}
+
+\title{\vspace{-0.6cm}\textbf{When Does Importance-Aware Tiering of Multimodal KV Caches Pay Off?\\ A Hypothesis-Driven Simulation Study on Real Vision-Language Attention}}
+\author{Sudarshan Sudhakar\\ \small Independent research. Code, traces and all result tables: \texttt{KV-Tier} repository}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-0.9cm}
+
+\begin{abstract}
+Vision-language models (VLMs) turn each image into hundreds of visual tokens, and the key--value (KV) cache they create dominates memory traffic during decoding. Algorithmic work compresses this cache but assumes one flat memory. We ask the \emph{architecture} question instead: should KV entries of different importance live in different memory tiers, and what does moving an entry between tiers cost? We model a two-tier system, a conventional FP16 \hot{} tier and a compute-in-memory INT4 \warm{} tier, driven by a live per-entry importance estimate and a hysteretic promote/demote policy that pays an explicit reconfiguration cost. The study is a chain of seven experiments in which each result motivates the next. Policy gains found on synthetic attention \emph{did not replicate} on real SmolVLM attention; the effect appeared only when entries were modelled per (token, layer); a layer/role prior was tested as the explanation and falsified; and the effect was then established on 42 images (natural photos, charts, documents) and two model sizes under a rule fixed in advance. With dense reads and a $10\times$ reconfiguration cost, the dynamic policy lowers energy by \textbf{22.3\%} (95\% CI 21.9--22.8) on SmolVLM-256M and \textbf{23.4\%} on SmolVLM-500M relative to static modality tiering, at neutral quality, and thresholds transfer across model sizes unchanged. The saving survives a reconfiguration cost up to about $20\times$ and breaks even near $50\times$. It vanishes under sparse (top-10\%) attention reads. Two checks address the strongest objections to a simulation study. The saving is robust to a degraded importance signal (noise, stale, or sampled every 8th step: $-18.6$ to $-21.8\%$) but not to collapsing it to one score per token ($-7.6\%$). With INT4 actually applied inside SmolVLM-256M, the dynamic placement changes the next-token distribution \textbf{21.8\% less} than static modality (KL, lower on 37 of 42 images) and \textbf{9.4$\times$ less} than random placement of the same number of INT4 entries.
+\end{abstract}
+
+\noindent\textbf{Keywords:} KV cache $\cdot$ vision-language models $\cdot$ tiered memory $\cdot$ compute-in-memory $\cdot$ memory-centric architecture $\cdot$ negative results.
+
+\section{Introduction}
+A vision-language model prefills an image as hundreds to thousands of visual tokens. Each token adds a KV entry in every transformer layer, and during autoregressive decoding every new token reads that cache again. For long multimodal contexts the cache, not the arithmetic, sets the energy and bandwidth bill. A large body of recent work shrinks the cache by pruning, quantizing or merging visual tokens~\cite{vlcache,zipvl,aircache,topv,fastv}. All of it assumes a flat, undifferentiated memory and decides only \emph{what to discard}.
+
+We study the complementary architectural question. If entries differ in how much attention they receive, should they also differ in \emph{where they live}? We consider a memory with a \hot{} tier (conventional DRAM/HBM, FP16, lossless) and a \warm{} tier (compute-in-memory, INT4, lower energy per byte, slower per access, lossy). Placing a lightly attended entry in \warm{} saves energy; placing a heavily attended one there costs quality. Importance changes as decoding proceeds, so a policy may \emph{move} entries, but every move is paid for. The design question is whether live, per-entry placement beats the simple static rule ``visual tokens in \warm{}, text in \hot{}'', and under which conditions.
+
+\paragraph{Approach.} We build a SimPy simulator with an explicit cost model for access, quantization error and tier moves, and we feed it \emph{real} decode-time attention extracted from SmolVLM. We treat the work as a sequence of falsifiable hypotheses. Each experiment is motivated by the weakness of the previous one (Fig.~\ref{fig:roadmap}). Selection rules and success criteria were written in the lab notes before the corresponding runs (a self-imposed discipline, not an external registration), and every deviation from them is logged.
+
+\paragraph{Contributions.}
+\begin{enumerate}[leftmargin=1.3em]
+\item A reconfiguration-aware, quality-aware simulator for modality- and importance-aware KV placement, with a measured (not assumed) INT4 error and a linearity property that makes reconfiguration cost an exact post-hoc parameter.
+\item A negative result with a diagnosis: the synthetic-trace win does not replicate on real attention, because real visual tokens receive only $\sim$6\% of attention mass; the win appears at per-(token, layer) granularity and is \emph{not} explained by a layer or role prior (a static profile is $16$--$26\%$ worse in quality at matched energy).
+\item A pre-specified scale-up (42 images, three image kinds, two model sizes, leave-one-trace-out selection, bootstrap CIs) establishing \textbf{$-22$ to $-23\%$ energy at neutral quality} for dense reads, with a cost break-even near $50\times$ and a clear failure region (sparse reads).
+\item Two checks aimed at the strongest objections to a simulation study: robustness to a \emph{non-oracle} importance signal (Sec.~\ref{sec:est}) and agreement of the quality proxy with \emph{measured} changes in the real model's output distribution when INT4 is actually applied (Sec.~\ref{sec:real}).
+\end{enumerate}
+
+\begin{figure}[t]
+\centering
+\input{fig_roadmap.tex}
+\caption{The study as a chain of hypotheses. Each box states the question, the finding, and (on the arrow) the weakness that forced the next experiment. Red marks the two results that overturned an earlier belief.}
+\label{fig:roadmap}
+\end{figure}
+
+\section{Related Work}
+\paragraph{Algorithm-level visual KV compression.} VL-Cache~\cite{vlcache} (modality- and sparsity-aware budgeting), ZipVL~\cite{zipvl} (dynamic token sparsification), AirCache~\cite{aircache} and TopV~\cite{topv} (inter-modal relevance and token pruning) and FastV~\cite{fastv} (early-layer visual token pruning) show that visual tokens are, on average, less important to decoding than text tokens and can be compressed with small accuracy loss. For text LLMs, H2O~\cite{h2o} and SnapKV~\cite{snapkv} keep heavy-hitter entries, StreamingLLM~\cite{streaming} keeps attention sinks plus a recent window, KIVI~\cite{kivi} quantizes the cache to 2 bits, and Quest~\cite{quest} reads only query-relevant pages. These methods \emph{discard or shrink}. We instead ask where an entry should reside and what it costs to move it, a question they do not pose because their memory is flat.
+
+\paragraph{Memory systems for LLM serving.} PagedAttention~\cite{vllm} manages KV memory in fixed blocks, and a growing set of near-/in-memory accelerators target attention (single-tier, not modality-aware). Our contribution is orthogonal: a reconfiguration-cost model for \emph{moving} entries between a high-fidelity tier and a low-energy lossy tier, evaluated on real attention, with the conditions under which it fails.
+
+\paragraph{Positioning.} Our access-cost constants are stylised ratios (Table~\ref{tab:tiers}), not a specific device, so absolute energies are not claims about hardware. What the study can support are \emph{ratios between policies under one shared cost model} and the sensitivity of those ratios to the assumptions that matter.
+
+\section{System Model}
+\subsection{Entities and tiers}
+A decode session has a prefill of $n_p$ tokens (visual or text) followed by $T{=}64$ generated tokens. Following the per-layer view of Sec.~\ref{sec:layers}, one \emph{entry} is the KV pair of one (token, layer); a model with $\ell$ layers has $\ell$ entries per token. Every decode step, every active entry is read once (dense reads) with attention weight $w_{e,t}$, $\sum_e w_{e,t}{=}1$.
+
+\begin{figure}[t]
+\centering
+\input{fig_arch.tex}
+\caption{System model. A decode trace supplies, per step, the attention each entry receives. Reads are charged to the entry's current tier. The live importance monitor sees only past weights, never the future. The policy may request a tier change, which the reconfiguration manager charges at a multiple of a \hot{} access. Quality is accounted separately from energy and latency.}
+\label{fig:arch}
+\end{figure}
+
+\begin{table}[t]
+\centering\small
+\caption{Tier cost model (stylised, one shared set of ratios for all policies). The per-access cost is $c_0 + c_1\cdot\text{bytes}$ at the tier's own precision.}
+\label{tab:tiers}
+\begin{tabular}{lccccc}
+\toprule
+Tier & Precision & Base lat. (ns) & Lat./byte (ns) & Base energy (pJ) & Energy/byte (pJ)\\
+\midrule
+\hot{}  & FP16 (2 B/elem) & 20 & 0.010 & 5.0 & 8.0\\
+\warm{} & INT4 (0.5 B/elem) & 30 & 0.015 & 0.5 & 0.8\\
+\bottomrule
+\end{tabular}
+\\[2pt]
+{\footnotesize \warm{} is $10\times$ cheaper per byte in energy, $1.5\times$ slower per access, and stores 4$\times$ fewer bytes. Quality weight of a \warm{} read: INT4 relative error $\epsilon$.}
+\end{table}
+
+\subsection{Quality proxy}
+Reading entry $e$ from \warm{} perturbs its key and value by INT4 quantization. We charge a quality loss of $w_{e,t}\cdot\epsilon$, so the per-step quality loss is $\epsilon$ times the attention mass served from \warm{}. The simulator's default is $\epsilon{=}0.05$, an assumption made before any measurement. We later measured $\epsilon$ on real SmolVLM KV tensors (per-token asymmetric min-max INT4, groups of 32): relative $L_2$ error $0.102$ (K) and $0.081$ (V), about $0.09$ on average and $\sim\!1.8\times$ our default; visual and text tokens differ by under 1\%. Because loss is linear in $\epsilon$, \emph{every quality ratio between policies is unchanged}, and only absolute quality values scale. Section~\ref{sec:real} tests whether this proxy actually predicts the real model's behaviour.
+
+\subsection{Importance monitor and policy}
+The monitor keeps an exponential moving average (EMA, decay $0.9$) of the attention each entry receives, updated at the end of every step from that step's weights only. The \emph{dynamic hybrid} policy starts each entry at its modality prior (visual $\rightarrow$ \warm{}, text $\rightarrow$ \hot{}) and then applies a hysteresis rule: promote \warm{}$\to$\hot{} when importance exceeds $\theta_{\uparrow}$ and demote \hot{}$\to$\warm{} when it falls below $\theta_{\downarrow}<\theta_{\uparrow}$. A warm-up of two EMA updates prevents moves driven by the zero-initialised EMA. Thresholds are expressed in multiples of \emph{uniform attention} $1/n_p$ (so a threshold of $8\times$ means ``eight times what a uniform cache would give each entry''), which makes them comparable across traces of different length.
+
+\subsection{Reconfiguration and its linearity}
+A tier change costs $m$ times one \hot{} access, in both latency and energy ($m{=}10$ by default). Policy decisions depend on the importance EMA and never on cost, so a run's totals decompose exactly as
+\begin{equation}
+E(m)=E_{\text{access}}+m\,E_{\text{reconf}}^{(1\times)},
+\end{equation}
+which is verified by a unit test. We therefore simulate once at $m{=}1$ and obtain any other cost as an exact post-hoc sum. This is what makes the cost sweeps in Sec.~\ref{sec:scale} cheap and exact (thresholds are, however, \emph{re-selected} at each cost).
+
+\subsection{Baselines and metrics}
+\textbf{Flat}: everything in \hot{}. \textbf{Static modality}: visual in \warm{}, text in \hot{}, never moved; this is the strong baseline throughout and all results are percentages \emph{relative to it}, per trace. \textbf{Static layer/role profile}: groups of (modality or role) $\times$ layer placed in \hot{} when their mean importance exceeds a threshold, fixed offline (Sec.~\ref{sec:m6b}). We report total energy, serialised latency, the quality proxy, and the number of tier moves. \textbf{Sparse reads} (Sec.~\ref{sec:layers}) read only the top-$k\%$ entries by live importance plus entries created in the last step.
+
+\section{Evaluation Protocol}
+\label{sec:protocol}
+Because the policy has free thresholds, the main risk is fitting them to the test set. We adopted three rules and kept them across milestones.
+\begin{enumerate}[leftmargin=1.3em]
+\item \textbf{Selection rule.} Thresholds $(\theta_\uparrow,\theta_\downarrow)$ are the pair with the lowest mean energy among those whose mean quality loss is no worse than static modality's on the \emph{training} traces (fallback: lowest quality loss).
+\item \textbf{Held-out evaluation.} Milestone 5--6: fit on two traces, test on the third. Milestone 7--8: \emph{leave-one-trace-out} over all 42 traces. Results are held-out means.
+\item \textbf{A fixed pass criterion for the headline claim} (written before the 42-image runs): mean held-out energy saving $\ge 10\%$; mean quality-loss change $\le +2\%$; paired-bootstrap 95\% CI of the energy saving excludes 0; the sign holds in each of the three image kinds. Anything weaker is reported as ``not established''.
+\end{enumerate}
+Deviations from pre-set plans are stated where they occur: the choice of damping rule (Sec.~\ref{sec:synth}), the change of thresholds to multiples of uniform attention after the first real-data failure (Sec.~\ref{sec:real5}), and the widening of the threshold grid after every fold chose the grid corner (Sec.~\ref{sec:scale}).
+
+\paragraph{Data.} Three locally generated images (chart, scene, noise+label) for Milestones 5--6; 42 images for Milestone 7--8 (24 COCO val2017 photos~\cite{coco}, 10 matplotlib charts, 8 rendered text documents), each with a task prompt. Models: SmolVLM-256M-Instruct (primary) and SmolVLM-500M-Instruct~\cite{smolvlm}. Per image, we greedy-decode 64 tokens and record, at every step, the head-averaged attention row of every layer (30 layers for 256M). The generated text was checked to confirm the model uses the image.
+
+\section{Experiments, in the Order They Built on One Another}
+
+\subsection{E1 --- Synthetic traces: is dynamic placement worth its reconfiguration cost?}
+\label{sec:synth}
+\textbf{Question.} Does a hysteretic promote/demote policy beat static modality tiering once moves are paid for? \textbf{Setup.} A synthetic trace (20 text + 500 visual tokens, 64 steps, a salient 8\% of visual tokens, recency bias) reproduces the literature's pattern that visual tokens are on average less important but a salient minority persists.
+
+\textbf{Step 1: an energy-and-latency-only comparison is degenerate.} A trivial \emph{all-\warm{}} policy beat every dynamic configuration by $-78.6\%$ energy at $+2.6\%$ latency. With no cost for INT4 error, \hot{} has no reason to exist. We added the quality term of Sec.~3.2.
+
+\textbf{Step 2: the policy trades energy for quality.} With quality included, the first dynamic policy \emph{lost} to static modality ($+67\%$ energy): recency-driven importance spikes at the prefill/decode boundary promoted entries that fell back below the demote threshold within $\sim$20 steps, so entries round-tripped and each round trip cost $10\times$ a \hot{} access. Adding a 2-step warm-up (selected over alternatives by quality gain per unit of energy, a post-hoc choice we record as such) cut energy overhead from $+64.8\%$ to $+55.8\%$ and improved quality from $-46.1\%$ to $-49.3\%$; a longer dwell time only batched all moves into one burst.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_synth.pdf}
+\caption{Synthetic trace, default configuration, $10\times$ reconfiguration cost. (a, b) The dynamic policy sits between static modality and flat on energy and halves the quality loss. (c) It does so by promoting the salient visual tokens in the first $\sim$12 steps, cutting the attention mass served from \warm{} from $\sim$97\% to $\sim$36\% by step 12 and $\sim$25\% by the end.}
+\label{fig:synth}
+\end{figure}
+
+\textbf{Finding.} On the synthetic trace, dynamic placement buys a large \emph{quality} gain ($-48.8\%$ quality loss) for $+55\%$ energy over static modality (Fig.~\ref{fig:synth}), a far better rate than interpolating between static and flat (flat: $-100\%$ quality loss for $+748\%$ energy). \textbf{Limitation that drives E2.} This depends on 68\% of attention mass landing on \warm{}-resident salient visual tokens, an assumption of the generator. Whether real VLMs behave this way was untested.
+
+\subsection{E2 --- Real attention: does the synthetic result replicate?}
+\label{sec:real5}
+\textbf{Question.} Replace the generator by SmolVLM-256M's measured decode attention (3 images, layer- and head-averaged, one entry per token). \textbf{Finding: it does not replicate.} Visual tokens receive only $\sim$6\% of the attention mass ($5$--$7\%$ across the three images), versus 68\% served from \warm{} in the synthetic trace. A single attention sink at position 0 takes $\sim$35\%, and recently generated tokens another $\sim$36\% (Fig.~\ref{fig:anatomy}a). The visual attention that exists is heavy-tailed and persistent as assumed (the top 8\% of visual tokens hold 61--70\% of visual mass, with a 74--83\% overlap between the first and last step), but the stakes are small: static modality already sits near the quality floor (quality loss $\approx$0.003), so flat$\to$static is $-88$ to $-90\%$ energy for almost no quality.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_anatomy.pdf}
+\caption{(a) Where real decode attention goes (SmolVLM-256M, three images; layer- and head-averaged). (b) The synthetic trace badly overstated how much attention the \warm{} tier would serve.}
+\label{fig:anatomy}
+\end{figure}
+
+\textbf{A second failure: synthetic thresholds do not transfer.} Uniform attention is $\approx$0.0011 and even the 99th-percentile visual EMA ($\approx$0.0008) is below the synthetic promote threshold (0.006), so nothing visual is ever promoted; the policy then only demotes text, with $-23$ to $-27\%$ energy but $+37$ to $+42\%$ quality loss. Re-expressing thresholds in multiples of uniform attention (a deviation we record) and following the protocol of Sec.~\ref{sec:protocol} (fit on two traces, test on the third) gave thresholds $2.0\times/0.4\times$ and, on the held-out trace, $-14.4\%$ energy but $+11.9\%$ quality loss: the no-worse-quality criterion \textbf{failed}. \textbf{Conclusion of E2:} the M4 trade-off was a property of the synthetic trace. We kept the negative result and asked what the layer- and head-averaging was hiding. A per-layer look at one trace shows visual attention mass varying from $\sim$3\% to 39\% across layers (layer 0: 39\%) and the sink being $\approx$0\% in layers 0--1 but 40--78\% in layers 12--30, so one averaged entry per token plausibly hid the structure a policy could use.
+
+\subsection{E3 --- Per-(token, layer) entries, sparse reads, and measured INT4 error}
+\label{sec:layers}
+\textbf{Changes.} (i) One entry per (token, layer), with each layer's attention renormalised so the step's total mass stays 1; (ii) a \emph{sparse-read} model (top-$k\%$ entries by live importance plus the newest entries; skipped mass is reported and costs nothing; the importance estimate is an upper bound, oracle and free); (iii) a measured INT4 error (Sec.~3.2). Same protocol as E2.
+
+\begin{table}[t]
+\centering\small
+\caption{E3: held-out trace (fit on the other two), dynamic vs static modality, $10\times$ reconfiguration cost. ``Layer-avg'' is E2's single entry per token.}
+\label{tab:e3}
+\begin{tabular}{lcccc}
+\toprule
+Entries / reads & Flat/static energy & Chosen $\theta_\uparrow/\theta_\downarrow$ & Energy & Quality loss\\
+\midrule
+Layer-avg, dense        & 9.3$\times$ & 2.0/0.4 & $-14.4\%$ & $+11.9\%$\\
+Layer-avg, top-10\%     & 1.6$\times$ & 8.0/0.02 & $+0.2\%$ (no moves) & $0\%$\\
+Per-layer, dense        & 9.3$\times$ & 4.0/0.4 & $\mathbf{-20.0\%}$ & $+0.8\%$\\
+Per-layer, top-10\%     & 1.9--2.0$\times$ & 8.0/0.2 & $+3.7\%$ & $-0.2\%$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Finding: the first real-data win.} With per-layer entries and dense reads the dynamic policy saves $\sim$20\% energy on all three traces ($-20.6/-19.4/-20.0\%$) at roughly neutral quality ($-2.0/-10.3/+0.8\%$), using 1.2--1.4k tier moves per session (Tab.~\ref{tab:e3}). The held-out quality ($+0.8\%$) technically misses the strict ``no worse than static'' rule, which we state rather than round. Two boundary results appear: sparse reads shrink the headroom from $\sim\!9.3\times$ to $\sim\!1.6$--$2\times$ and the dynamic policy either has nothing to do (layer-average) or loses (per-layer, $+3.7$ to $+7.5\%$): with sparse reads \hot{} text entries are rarely read, so demoting them saves little while the moves still cost.
+
+\textbf{What this left open.} (a) An explanation: our working hypothesis was a \emph{layer effect}. (b) $n=3$ images, one model, one held-out trace.
+
+\subsection{E4 --- Is the per-layer win merely a layer prior? A falsification test}
+\label{sec:m6b}
+\textbf{Hypothesis (stated before testing).} If the win is a layer effect, a \emph{static} profile, a group importance map by (modality, layer) or (role, layer) with $\text{role}\in\{$sink, prompt text, generated, visual$\}$ built offline and with zero moves, should capture it. \textbf{Protocol.} Leave-one-trace-out profile and threshold $\theta$ (eight values from 0.05 to 4.0), plus an in-sample ceiling.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.5\linewidth]{figs/fig_m6b.pdf}\hfill
+\begin{minipage}[b]{0.46\linewidth}
+\caption{E4: the static (role $\times$ layer) profile traces a trade-off curve (dense reads, mean of three held-out folds) and never reaches the dynamic policy. At matched energy ($\approx-20\%$) the static profile loses roughly 16--26\% in quality while the dynamic policy gains 3\%.}
+\label{fig:m6b}
+\end{minipage}
+\end{figure}
+
+\textbf{Finding: hypothesis falsified.} At matched energy, the static profile has clearly worse quality than the dynamic policy (Fig.~\ref{fig:m6b}). The (modality, layer) grouping is degenerate (for $\theta\ge0.4$ it selects exactly the text groups, i.e.\ static modality), and the in-sample ceiling ($+27.2\%$ energy, $-18.4\%$ quality) nearly equals the cross-validated result ($+27.7\%$, $-18.6\%$), so this is neither under-fitting nor leakage: layer- and role-level information is too coarse. \textbf{Correction.} We had written that the saving came from ``demoting text entries in layers where text is unimportant''. The arithmetic stands (text entries are $\sim$45\% of static energy and the saving is about half of that) but the \emph{layer} part was wrong: no text layer group is unimportant on average. The saving comes from variation among individual text entries, i.e.\ which prompt tokens matter in this prompt, which only a per-entry, online signal sees. \textbf{What this left open:} everything rests on three images and one model.
+
+\subsection{E5 --- Scale-up: 42 images, three image kinds, two model sizes}
+\label{sec:scale}
+\textbf{Pre-specified claims} (fixed before running; Sec.~\ref{sec:protocol}): (a) the dense-read win holds under leave-one-trace-out; (b) its dependence on the reconfiguration cost; (c) its dependence on sparse read fraction; (d) transfer to a larger model (256M thresholds applied unchanged to 500M). Min-dwell variants were an additional check on move count.
+
+\begin{table}[t]
+\centering\small
+\caption{E5, dense reads, $10\times$ reconfiguration cost, leave-one-trace-out over 42 images. Percentages are vs static modality, per trace, then averaged; brackets are paired-bootstrap 95\% CIs. Quality loss $<0$ is better.}
+\label{tab:e5}
+\begin{tabular}{lcccc}
+\toprule
+Setting & Energy & Quality loss & Selected $\theta_\uparrow/\theta_\downarrow$ & Passes criterion\\
+\midrule
+256M, leave-one-out       & $-22.3\%$ [$-22.8,-21.9$] & $-2.5\%$ [$-4.0,-1.1$] & 8/0.4 (42/42 folds) & yes\\
+500M, leave-one-out       & $-23.4\%$ [$-24.1,-22.6$] & $-1.8\%$ [$-4.6,+0.9$] & 4/0.8 (42/42) & yes\\
+256M thresholds $\to$ 500M & $-23.6\%$ [$-24.1,-23.1$] & $+0.4\%$ [$-1.4,+2.1$] & 8/0.4 (no refit) & yes\\
+\midrule
+256M, top-10\% reads      & $+5.7\%$ [$+5.4,+5.9$] & $-0.7\%$ & 32/0.02 & \textbf{no}\\
+500M, top-10\% reads      & $+5.7\%$ [$+5.4,+6.0$] & $-0.6\%$ & 32/0.02 & \textbf{no}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{(a) The win is robust for dense reads.} The saving is negative on every one of the 42 traces. By image kind (256M): charts $-22.8\%$, documents $-20.2\%$, natural photos $-22.9\%$. Quality is \emph{neutral, not improved}: the per-trace rate of ``energy down and quality no worse'' is 76\% on 256M and 55\% on 500M, and the 500M quality interval includes zero. The ladder of Fig.~\ref{fig:ladder} shows how the estimate moved from E2 to here.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_ladder.pdf}
+\caption{Held-out effect of the dynamic policy across the stages of the study. The first bar is E2 (single entry per token), the second E3 (per layer); the last two are E5. Error bars are 95\% CIs (not available for the 3-trace stages).}
+\label{fig:ladder}
+\end{figure}
+
+\textbf{Grid edge.} The first 256M pass selected the grid corner (promote $8\times$, demote $0.4\times$) in all 42 folds, which would make leave-one-out meaningless and suggested the optimum might lie outside the grid. We widened the grid (promote up to $32\times$, demote up to $1.6\times$) after seeing this and re-ran (first-pass results are kept). The 10$\times$ dense result \emph{did not change} (still $-22.3\%$, 8/0.4 in all folds): the corner was a real optimum and not a search limit.
+
+\textbf{(b) Reconfiguration cost.} Re-selecting thresholds at each cost, the saving is $-31.6\%$ at $1\times$, $-26.5\%$ at $5\times$, $-16.1\%$ at $20\times$, $-1.7\%$ at $50\times$ and $+13.4\%$ at $100\times$ on 256M (500M: $-32.3, -27.7, -15.1, -1.9, +13.2$). The break-even is about $50\times$ on both models, leaving a factor of about five of margin at the default $10\times$ (Fig.~\ref{fig:cost}a). \textbf{(c) Sparse reads.} With top-10\% reads the dynamic policy \emph{loses} ($+5.7\%$ energy on both models, every trace worse). The 256M sweep over read fraction gives $-20.1\%$ (top-50\%), $-6.0\%$ (top-20\%), $+7.5\%$ (top-10\%) and $+15.0\%$ (top-5\%) (Fig.~\ref{fig:cost}b): the advantage needs dense or nearly dense reads. The chosen thresholds at 10\% (32/0.02) sit at a new grid corner, so we cannot exclude a modest shift with a wider grid, but not a change of sign of this magnitude. \textbf{(d) Transfer.} 256M thresholds applied unchanged to 500M give $-23.6\%$ energy at $+0.4\%$ quality, essentially the same as 500M's own cross-validated optimum.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_cost_sparse.pdf}
+\caption{(a) Energy saving vs reconfiguration cost (thresholds re-selected per cost; bands are 95\% CIs); the saving breaks even near $50\times$. (b) Dense reads are required: the saving shrinks and reverses as reads become sparse (flat/static energy ratio in parentheses).}
+\label{fig:cost}
+\end{figure}
+
+\textbf{Mechanism.} Ablating the policy at the selected 256M thresholds shows where the saving comes from (Fig.~\ref{fig:mech}): demote-only gives $-24.2\%$ energy but \emph{worsens} quality by $+6.8\%$; promote-only costs $+1.8\%$ energy and improves quality by $-7.6\%$; the full policy gives $-22.3\%$ energy and $-0.8\%$ quality. \textbf{Demotion earns the energy; promotion buys back the quality it would otherwise give up.} 87\% of moves (1008 of 1156 per session) are on prompt-text entries, consistent with E4. A min-dwell requirement only trades saving for fewer moves ($0/5/20/40$ steps: $-22.3/-19.8/-13.8/-5.9\%$), so the default no-dwell policy is preferred.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_mech.pdf}
+\caption{Mechanism ablation on 256M at the selected thresholds (a, b), and the per-trace outcome of the full policy by image kind (c): all 42 points have negative energy change; quality scatters around zero.}
+\label{fig:mech}
+\end{figure}
+
+\textbf{What E5 left open.} Two objections that no amount of further scaling answers: (1) the policy consumed the \emph{true} attention of every entry for free; (2) ``quality'' is an attention-weighted error proxy, not a measurement of what the model says. The next two experiments address them.
+
+\input{sec_m8a.tex}
+\input{sec_m8b.tex}
+
+\section{Discussion}
+\paragraph{What is established.} For dense per-layer reads, under one stylised but fixed cost model, importance-driven placement beats the strong static-modality baseline by $\sim$22--23\% energy at neutral quality on two model sizes and three image kinds, with thresholds that transfer across sizes and a break-even reconfiguration cost about five times the default. The saving is produced by demoting individual prompt-text entries whose importance is low \emph{in this prompt}, and the promotions that give quality back are few. The two added checks narrow the main objections: the gain does not require an oracle (it survives noisy, stale or sampled importance, provided importance stays per (token, layer)), and it is not an artefact of the quality proxy (when INT4 is applied in the real model, the policy keeps in \hot{} the entries that matter: its output divergence is 21.8\% below static modality's and 9.4$\times$ below random placement's). They do not replace hardware measurement, and neither the estimator's own cost nor a concrete approximate scorer is modelled.
+
+\paragraph{Where it does not apply.} (i) Sparse reads: with top-10\% reads the policy is a net loss and the \hot{}/\warm{} headroom itself shrinks to $\sim$2$\times$. (ii) Reconfiguration costs above roughly $50\times$ a \hot{} access. (iii) Coarse-grained placement: a static layer or role map cannot reproduce the effect. These boundaries are as much a part of the finding as the saving.
+
+\paragraph{Why the negative results stayed in.} E2 and E4 overturned beliefs we held (that the synthetic trade-off was general; that the win was a layer effect). Keeping them is what makes the later claim credible: the scale-up in E5 was designed to be able to fail, and the criterion was fixed beforehand.
+
+\paragraph{Limitations.}
+\begin{itemize}[leftmargin=1.2em]
+\item \textbf{Stylised cost model.} \warm{} is $10\times$ cheaper per byte and $1.5\times$ slower than \hot{}; the reconfiguration multiplier is swept but these ratios are not. Results are ratios between policies under shared assumptions, not device energies. There is no hardware measurement.
+\item \textbf{Models and data.} Two sizes of one model family, 42 images, 64 decode steps, one prompt per image. Larger models (we planned SmolVLM-2.2B and dropped it), other families and long-form generation are untested. Attention is head-averaged per layer; per-head entries are not modelled.
+\item \textbf{Two tiers, unlimited capacity.} No capacity pressure on \hot{}, no bandwidth contention, serialised latency.
+\item \textbf{Scope of the two added checks.} E6 charges nothing for computing the importance signal. E7 covers one model, one INT4 scheme (the one measured in Sec.~3.2) and measures distributional change (KL over 64 teacher-forced steps), not benchmark accuracy; INT4 effects on this small model are small in absolute terms.
+\item \textbf{Post-hoc choices} (logged above): the damping rule in E1, the threshold normalisation in E2, the grid widening in E5.
+\end{itemize}
+
+\section{Conclusion}
+We asked whether importance-aware tiering of multimodal KV caches pays off, and answered with a chain of experiments in which every step either confirmed or overturned the last. The answer is conditional: yes for dense reads, per-entry importance and moderate reconfiguration cost, by $\sim$22--23\% energy at neutral quality, robustly across 42 images and two model sizes; no for sparse reads or very costly moves. The study also leaves a usable method: fix the selection rule and pass criterion before looking, report held-out numbers with intervals, and keep the experiments that failed.
+
+\paragraph{Reproducibility.} All code, traces, per-simulation CSVs and this paper's figure scripts are in the repository. \texttt{experiments/run\_m7.py}, \texttt{analyze\_m7.py}, \texttt{run\_m7\_estimators.py}, \texttt{validate\_real\_output.py} and \texttt{paper/make\_figures.py} regenerate Sections 5.5--5.7; the lab notebook \texttt{NOTES.md} records every deviation chronologically.
+
+\begin{thebibliography}{99}\small
+\bibitem{vlcache} Tu, D., et al.: VL-Cache: Sparsity and modality-aware KV cache compression for vision-language model inference acceleration. arXiv (2024).
+\bibitem{zipvl} He, E., et al.: ZipVL: Efficient large vision-language models with dynamic token sparsification. arXiv (2024).
+\bibitem{aircache} Huang, K., et al.: AirCache: Activating inter-modal relevancy KV cache compression for efficient large vision-language model inference. arXiv (2025).
+\bibitem{topv} Yang, C., et al.: TopV: Compatible token pruning with inference time optimization for fast and low-memory multimodal vision language model. CVPR (2025).
+\bibitem{fastv} Chen, L., et al.: An image is worth 1/2 tokens after layer 2: Plug-and-play inference acceleration for large vision-language models. ECCV (2024).
+\bibitem{h2o} Zhang, Z., et al.: H2O: Heavy-hitter oracle for efficient generative inference of large language models. NeurIPS (2023).
+\bibitem{snapkv} Li, Y., et al.: SnapKV: LLM knows what you are looking for before generation. NeurIPS (2024).
+\bibitem{streaming} Xiao, G., et al.: Efficient streaming language models with attention sinks. ICLR (2024).
+\bibitem{kivi} Liu, Z., et al.: KIVI: A tuning-free asymmetric 2bit quantization for KV cache. ICML (2024).
+\bibitem{quest} Tang, J., et al.: Quest: Query-aware sparsity for efficient long-context LLM inference. ICML (2024).
+\bibitem{vllm} Kwon, W., et al.: Efficient memory management for large language model serving with PagedAttention. SOSP (2023).
+\bibitem{smolvlm} Marafioti, A., et al.: SmolVLM: Redefining small and efficient multimodal models. arXiv (2025).
+\bibitem{coco} Lin, T.-Y., et al.: Microsoft COCO: Common objects in context. ECCV (2014).
+\end{thebibliography}
+
+\end{document}
