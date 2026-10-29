@@ -1,0 +1,43 @@
+name,kind,prompt
+natural_00,natural,Describe this image in detail.
+natural_01,natural,What is happening in this picture?
+natural_02,natural,What objects can you see in this image?
+natural_03,natural,Describe this image in detail.
+natural_04,natural,What is happening in this picture?
+natural_05,natural,What objects can you see in this image?
+natural_06,natural,Describe this image in detail.
+natural_07,natural,What is happening in this picture?
+natural_08,natural,What objects can you see in this image?
+natural_09,natural,Describe this image in detail.
+natural_10,natural,What is happening in this picture?
+natural_11,natural,What objects can you see in this image?
+natural_12,natural,Describe this image in detail.
+natural_13,natural,What is happening in this picture?
+natural_14,natural,What objects can you see in this image?
+natural_15,natural,Describe this image in detail.
+natural_16,natural,What is happening in this picture?
+natural_17,natural,What objects can you see in this image?
+natural_18,natural,Describe this image in detail.
+natural_19,natural,What is happening in this picture?
+natural_20,natural,What objects can you see in this image?
+natural_21,natural,Describe this image in detail.
+natural_22,natural,What is happening in this picture?
+natural_23,natural,What objects can you see in this image?
+chart_00,chart,Describe this chart in detail.
+chart_01,chart,Describe this chart in detail.
+chart_02,chart,Describe this chart in detail.
+chart_03,chart,Describe this chart in detail.
+chart_04,chart,Describe this chart in detail.
+chart_05,chart,Describe this chart in detail.
+chart_06,chart,Describe this chart in detail.
+chart_07,chart,Describe this chart in detail.
+chart_08,chart,Describe this chart in detail.
+chart_09,chart,Describe this chart in detail.
+doc_00,doc,What does this document say?
+doc_01,doc,Summarize the text in this image.
+doc_02,doc,What are the numbers in the table?
+doc_03,doc,What is the title?
+doc_04,doc,What does this document say?
+doc_05,doc,Summarize the text in this image.
+doc_06,doc,What are the numbers in the table?
+doc_07,doc,What is the title?

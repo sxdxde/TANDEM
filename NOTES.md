@@ -300,6 +300,67 @@ Observations (means over the three held-out folds, vs static_modality):
   operating point and dynamic is +5.9% energy / -3.7% quality). Caveats as before: 3 images, one
   small model, theta grid coarse (8 values), static comparators limited to two groupings.
 
+## M7: scale-up and robustness (protocol written BEFORE running; results below it)
+Motivation: M5/M6/M6b rest on n=3 images, one 256M model, one held-out trace. Claims to test:
+(a) the dense-read per-layer dynamic win (~-20% energy, ~neutral quality vs static_modality),
+(b) how it depends on reconfiguration cost, (c) how it depends on sparse top-k fraction,
+(d) whether it transfers to a larger model.
+Data: 42 images (`experiments/make_dataset.py`): 24 COCO val2017 natural photos, 10 matplotlib
+charts, 8 rendered text documents. Models: SmolVLM-256M (primary), SmolVLM-500M (replication).
+Traces `traces/<tag>/*_layers.npz` via `experiments/extract_many.py`; simulations via
+`experiments/run_m7.py`, analysis via `experiments/analyze_m7.py` (results/m7_*).
+Fixed in advance:
+1. Primary protocol = leave-one-trace-out CV over all 42 traces: thresholds (promote/demote, x uniform
+   attention; grid as M6) are chosen on the other 41 traces = lowest mean energy with mean quality loss
+   <= static_modality's (fallback lowest quality), then evaluated on the held-out trace. Dense reads,
+   10x reconfiguration cost, warmup 2. Same rule as M5/M6, no new tuning.
+2. "Dynamic advantage is robust" requires ALL of: mean held-out energy saving >= 10%; mean held-out
+   quality ratio vs static <= +2%; paired-bootstrap 95% CI of the energy saving excludes 0; the sign holds
+   in each of the 3 image kinds. Anything weaker is reported as "not established".
+3. Reconfiguration cost: multipliers 1,2,5,10,20,50,100; thresholds re-selected per cost. Break-even =
+   smallest multiplier at which mean held-out energy saving <= 0. Exact because reconfig cost is additive
+   (tests/test_m7_linearity.py).
+4. Top-k: dense, 50, 20, 10, 5% on the reduced grid (promote {1,2,4,8}x, demote {0.1,0.4}x).
+5. Cross-model: thresholds chosen on all 256M traces, applied unchanged to 500M traces (and the reverse
+   is NOT done); plus 500M's own LOO-CV.
+6. Cost-reduction check: min-dwell variants {0,5,20,40} on the reduced grid (moves vs energy).
+Not done in M7 (stated up front): per-head entries, models other than SmolVLM, real-hardware cost
+validation, an actual approximate importance estimator.
+
+### M7 results (256M primary, 500M replication; 42 images each)
+Deviation from the protocol above, made after seeing results: the first pass picked the grid corner
+(promote 8x / demote 0.4x) in all 42 folds, so the grid was widened (promote up to 32x, demote up to 1.6x)
+and the dense/top-10% simulations re-run for the new configs. First-pass CSVs: `results/_m7_first_pass_grid8/`.
+The top-k and min-dwell sweeps stay on the reduced 8-config grid by design, so they were not redone.
+
+Pre-registered "robust" test (energy saving >= 10%, quality <= +2%, CI excludes 0, same sign in all 3 image
+kinds), dense reads, 10x reconfiguration cost, leave-one-trace-out:
+| model | energy vs static | quality vs static | robust? | thresholds chosen |
+|---|---|---|---|---|
+| 256M (LOO-CV) | -22.3% [-22.8, -21.9] | -2.5% [-4.0, -1.1] | yes | 8/0.4 in 42/42 folds |
+| 500M (LOO-CV) | -23.4% [-24.1, -22.6] | -1.8% [-4.6, +0.9] | yes | 4/0.8 in 42/42 folds |
+| 256M thresholds -> 500M, unchanged | -23.6% [-24.1, -23.1] | +0.4% [-1.4, +2.1] | yes | 8/0.4 |
+Widening the grid did not change the 10x dense result: 8/0.4 was a real optimum, not a search limit.
+- By kind (256M): chart -22.8%, doc -20.2%, natural -22.9% energy; energy is negative on every trace.
+- Quality is neutral, not improved: per-trace win rate (energy down AND quality no worse) is 76% on 256M,
+  55% on 500M (36% for the transferred thresholds); 500M quality CIs include 0.
+- Reconfiguration cost (thresholds re-selected per cost): 256M saving is -31.6% at 1x, -26.5% at 5x, -16.1% at 20x,
+  -1.7% at 50x, +13.4% at 100x. 500M: -32.3%, -27.7%, -15.1%, -1.9%, +13.2%. Break-even is about 50x on both.
+  The 10x operating point has roughly 5x margin to break-even.
+- Sparse reads do NOT help: with top-10% reads the dynamic policy costs +5.7% energy on both models (quality
+  -0.6%, every trace worse on energy; chosen thresholds 32/0.02 are the new grid corner, so a wider grid could
+  move this, but not plausibly to a 10% saving). Reduced-grid top-k sweep (256M): k=50% -20.1%, 20% -6.0%,
+  10% +7.5%, 5% +15.0%. The advantage needs dense or near-dense reads.
+- Min-dwell (256M, reduced grid) only trades savings for fewer moves: dwell 0/5/20/40 -> -22.3/-19.8/-13.8/-5.9%.
+- Mechanism (256M, 8/0.4): the saving comes from demotion. demote-only -24.2% energy but +6.8% quality loss;
+  promote-only +1.8% energy, -7.6% quality loss; full policy -22.3% energy, -0.8% quality. Promotion buys back
+  the quality that demotion gives up.
+Verdict: the dense-read per-layer dynamic win replicates across two model sizes and three image kinds and
+survives a >10x reconfiguration cost. It is a dense-read result only.
+Not done: SmolVLM-2.2B (planned in the overnight script; dropped as low marginal value), per-head entries,
+other model families, real-hardware cost validation, a non-oracle importance estimator. Importance is oracle
+attention; reconfiguration cost is a modelled multiplier, not measured.
+
 ## Open questions / caveats
 - Synthetic M4 conclusions did not replicate on real traces (see M5); treat the M4
   quality-vs-energy numbers as a property of the synthetic trace, not of VLMs.

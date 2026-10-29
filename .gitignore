@@ -12,3 +12,6 @@ results/*.png
 # never intended to be pushed with project content.
 .claude/
 CLAUDE.local.md
+logs/
+traces/s*/
+data/images/

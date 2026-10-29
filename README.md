@@ -121,28 +121,31 @@ traces comes from per-entry information, not a layer prior.
 
 ```
 kvtier-memcentric/
-  README.md
-  pyproject.toml
-  configs/
-    default.yaml          # tier costs, trace generation parameters
+  README.md, NOTES.md (lab notes, chronological), pyproject.toml
+  configs/default.yaml      # tier costs, trace generation, policy + reconfig parameters
   src/kvtier/
     kv_entry.py             # TokenKV dataclass, Modality enum, Tier enum
     trace.py                # synthetic prefill+decode trace with attention weights
-    tiers.py                # HOT/WARM per-access latency + energy cost model
-    policy.py               # FlatPolicy, StaticModalityPolicy, DynamicHybridPolicy
+    tiers.py                # HOT/WARM per-access latency + energy + quant-error model
+    policy.py               # Flat, StaticModality, DynamicHybrid, LayerModality policies
     monitor.py              # live per-entry importance EMA (separate from trace.py's)
     reconfig.py             # promotion/demotion cost model
-    simulator.py            # SimPy environment driving a trace through a policy
-    metrics.py              # energy/latency/footprint aggregation + comparison tables
-    viz.py                  # (M4) timeline + comparison plots
+    simulator.py            # SimPy environment driving a trace through a policy (+ SparseAccess)
+    metrics.py              # energy/latency/quality/footprint aggregation
+    real_trace.py           # (M5/M6) real attention -> TraceSession, layer-averaged or per-layer
+    profile.py              # (M6b) group importance profiles for layer/role-aware static policies
   experiments/
-    validate_trace.py       # Milestone 1 checkpoint
-    run_flat_baseline.py    # Milestone 2 checkpoint
-    run_static_modality.py  # Milestone 2 checkpoint
-    run_dynamic_hybrid.py   # Milestone 3 checkpoint
-    compare_all.py          # (M4)
-  tests/
-  results/
+    validate_trace.py, run_flat_baseline.py, run_static_modality.py, run_dynamic_hybrid.py  # M1-M3
+    run_sensitivity.py, run_damping_sweep.py, make_plots.py                                 # M4/M4b
+    extract_vlm_trace.py, run_real_trace.py                                                 # M5
+    extract_vlm_layer_trace.py, run_m6.py, measure_int4_error.py                            # M6
+    run_layer_aware.py                                                                      # M6b
+    make_dataset.py, extract_many.py, run_m7.py, analyze_m7.py, run_m7_mechanism.py         # M7
+  tests/                    # pytest (61+)
+  data/                     # M7 image set (manifest.csv; COCO photos are third-party, re-downloadable)
+  traces/                   # real attention traces (*.npz; M7 under traces/<model-tag>/)
+  results/                  # CSVs and plots
+  report/                   # HTML report source (build.py + template.html + parts/)
 ```
 
 ## Setup
