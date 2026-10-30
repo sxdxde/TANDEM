@@ -1,271 +1,180 @@
-# kvtier — Tiered Memory-Centric Architecture for Modality-Aware KV-Cache Placement
+# TANDEM — joint data and computation placement for VLM KV caches
 
-Vision-language models expand each image into hundreds or thousands of visual
-tokens, causing the LLM decoder's KV cache to balloon and dominate memory
-traffic during decode. A large, active body of work (TopV, AirCache,
-VL-Cache, ZipVL, HybridKV, TokenCarve) shows that visual-token KV entries
-carry systematically less attention importance than text-token entries on
-average, and exploits this by pruning, quantizing, or merging tokens. All of
-that work operates at the *algorithm* layer: it assumes a flat,
-undifferentiated KV cache in ordinary GPU memory and only decides what to
-discard. This project asks the *architecture* question instead: should
-differently-important KV entries physically live in different memory tiers
-with different compute attached, and what does it cost, in hardware terms,
-to move an entry between tiers when its importance changes?
+**Course project, Computer Architecture — Sudarshan Sudhakar, IIITDM Kancheepuram**
 
-We build a two-tier memory-centric architecture — **HOT** (conventional,
-high-fidelity) and **WARM** (compute-in-memory, reduced-precision) — with a
-runtime importance monitor and a dynamic promotion/demotion policy that
-explicitly charges a reconfiguration cost for tier changes, and compare it
-against a flat (untiered) baseline and a static modality-only tiering
-baseline.
+> **TANDEM** = **T**iered, **A**daptive, **N**ear-memory **D**ata-and-compute placement for **E**fficient **M**ultimodal KV caches.
+> The system makes two runtime decisions *in tandem*: where each KV entry **lives** (data placement) and where each read is **computed** (computation placement).
 
-## Related work
+The paper is in [`paper/main.pdf`](paper/main.pdf) (21 pages, key points and contributions on page 1). The lab notebook with every decision, deviation and failed hypothesis is [`NOTES.md`](NOTES.md).
 
-**Algorithm-layer visual-KV compression** (the gap this project fills at the
-hardware layer): TopV (Yang et al., 2025), AirCache (Huang et al., 2025),
-VL-Cache (Tu et al., 2024), ZipVL (He et al., 2024), HybridKV (Zeng et al.,
-2026), TokenCarve (Tan et al., 2025). All show visual tokens are
-on-average less important to attention and compressible with minimal
-accuracy loss (VL-Cache: 10% retention, no accuracy drop).
+---
 
-**Hardware KV-cache accelerators** (single-tier, non-modality-aware —
-adjacent but distinct): LOKI, Sangam, MATA, HiKV.
+## 1. What this project is
 
-**Our contribution / gap**: no prior work treats modality-and-importance-aware
-KV-cache placement as a *tiered hardware architecture problem* with an
-explicit reconfiguration-cost model for promotion/demotion. This project
-does.
+The assigned topic is *Memory-Centric Computing Architecture: data-local execution and intelligent computation placement* — an architecture that decides, at run time, where computation should happen from the **location, movement, reuse and characteristics of data**, evaluated in a simulation in which memory, compute resources, data movement, placement and runtime decisions explicitly interact, including the **feasibility and overhead** of dynamic placement for **reusable, streaming and randomly accessed** data.
 
-## Status
+We instantiate this on a concrete, data-intensive workload: the **key–value (KV) cache of a vision-language model (VLM)**. A VLM expands an image into hundreds of visual tokens; every generated token re-reads their KV entries in every layer, so the cache dominates memory traffic during decode.
 
-**Milestone 1** (synthetic trace + tier cost model, no simulator yet) is
-implemented: `kv_entry.py`, `trace.py`, `tiers.py`, and a validation script
-that plots average importance by modality over decode, confirming the trace
-generator reproduces the literature's reported pattern (visual tokens'
-average importance declining while a small salient minority stays high)
-before anything is built on top of it.
+The memory has two tiers:
 
-**Milestone 2** (SimPy simulator + flat and static-modality baselines) is
-implemented: `simulator.py` walks a trace session step by step inside a
-SimPy process, charging each active entry's current tier for that step's
-attention lookup; `policy.py` adds the two static baselines (`FlatPolicy`,
-`StaticModalityPolicy`); `metrics.py` aggregates per-step energy, latency,
-and per-tier memory footprint into a comparison table. On the default
-config (20 text + 500 visual prefill tokens, 64 decode steps),
-`static_modality` cuts total energy by ~88% versus `flat` at the cost of
-~34% higher total latency — WARM's much lower per-byte energy wins on
-energy, but its higher per-access base latency and the sheer number of
-visual-token accesses each step outweigh that once most of the trace's
-active entries live there. See
-`results/milestone2_baseline_comparison.csv`.
+| Tier | Storage | Compute | Properties (stylised ratios, see §6) |
+|---|---|---|---|
+| **HOT** | FP16 DRAM/HBM | host | lossless reference |
+| **WARM** | INT4 compute-in-memory (CIM) arrays | in memory, or spilled to host | 10× lower energy per byte, 1.5× slower per access, lossy (INT4) |
 
-**Milestone 3** (dynamic hybrid policy + reconfiguration cost) is
-implemented: `monitor.py` tracks each entry's importance as a *live* EMA
-during simulation (reset to 0 at the start, updated once per step from
-only that step's attention weights — deliberately kept separate from
-`trace.py`'s full-session EMA, which would otherwise leak future decode
-steps into a live policy's decisions); `reconfig.py` charges a
-configurable multiple of a HOT access's cost on every tier change;
-`policy.py` adds `DynamicHybridPolicy`, which starts entries at their
-modality-prior tier and promotes/demotes based on live importance with
-hysteresis (`promote_threshold=0.006`, `demote_threshold=0.002`,
-`configs/default.yaml`).
+A runtime watches live importance and reuse and makes two decisions:
 
-On the default config, `dynamic_hybrid` currently **loses** to
-`static_modality`: +67% more total energy and +2% more total latency,
-from 82 promotions + 64 demotions (146 reconfig events at 10x a HOT
-access each). The cause is visible in the per-step time series: visual
-entries created late in prefill get an artificially high attention weight
-in the first few decode steps purely from position-proximity (the trace's
-recency bias), which pushes their live EMA above `promote_threshold`
-almost immediately; as that recency term decays over the next ~20 steps,
-the non-salient ones fall back below `demote_threshold` and get demoted
-again. Nothing prevents an entry from round-tripping like this, and each
-round trip costs 10x a HOT access. This is reported as a finding, not
-patched around — it's exactly the trade-off Milestone 4's sensitivity
-sweep (over thresholds and reconfiguration cost) is meant to
-characterize: whether and where a dynamic hybrid's advantage over static
-tiering actually survives reconfiguration overhead. See
-`results/milestone3_comparison.csv`.
+1. **Data placement** — which tier each (token, layer) entry occupies. Changing it is a *migration* that costs time, energy and bus traffic.
+2. **Computation placement** — whether a read of WARM data runs in memory or is pulled to the host (a scheduler that sees queue state).
 
-**Milestone 4** (comparison, visualization, sensitivity) is implemented. A
-quality penalty was added (`quant_error` per tier, attention-weighted) because
-an energy/latency-only comparison was degenerate: an all-WARM policy beat
-everything. With quality included, `dynamic_hybrid` trades roughly +55% energy for
--49% quality loss vs `static_modality` at the default config; see `NOTES.md`
-for the full log of observations and caveats (the 0.05 INT4 error is an
-assumption). The dynamic policy now defaults to `warmup_steps: 2` (see the M4b
-section of `NOTES.md`). Run `experiments/make_plots.py` and
-`experiments/run_sensitivity.py`; outputs are in `results/`.
+### How the task statement maps onto the work
 
-**Milestone 5** (real attention traces from SmolVLM-256M) is implemented
-(`experiments/extract_vlm_trace.py`, `experiments/run_real_trace.py`, traces in
-`traces/`). Headline: the M4 trade-off does **not** replicate on real traces.
-Visual tokens receive only ~6% of attention (vs 68% of mass served from WARM
-in the synthetic trace), so `static_modality` is already near the quality
-floor and the dynamic policy's benefit is marginal and failed a held-out
-check. See `NOTES.md` for the full analysis and caveats (3 traces, 1 model).
+| Requirement | Where it is addressed |
+|---|---|
+| Decide placement from location, movement, reuse, data characteristics | Location = tier; movement = bytes on a shared bus (reads, spills, partial sums, migrations); reuse = observed read frequency; characteristics = attention importance and INT4 error tolerance |
+| Compute near the data when beneficial, conventional compute otherwise | CIM units vs host lanes, adaptive spill scheduler (`src/kvtier/system.py`, experiment E8) |
+| Memory, compute, movement, placement and runtime decisions interacting | SimPy model with finite bus channels, host lanes, CIM units, work packets, per-step barrier, migration traffic sharing the bus |
+| Feasibility and overhead of dynamic placement | Bottom-up migration cost, break-even sweep, imperfect importance estimators, contention (E5, E6, E8, E9b) |
+| Reusable / streaming / random data | Three access regimes on real attention (E9) |
 
-**Milestone 6** (per-layer entries, sparse-attention cost model, measured INT4
-error) is implemented (`experiments/run_m6.py`). With one entry per
-(token, layer) and dense reads, the dynamic policy saves ~20% energy vs static
-at roughly neutral quality; with sparse reads that benefit disappears. Measured
-INT4 error is ~0.09, not the assumed 0.05 (ratios unaffected). Details and
-caveats in `NOTES.md`. A cross-validated layer/role-aware *static* baseline
-(`experiments/run_layer_aware.py`) does not match the dynamic policy at equal
-energy (about +16..+26% worse quality), so its advantage on real dense-read
-traces comes from per-entry information, not a layer prior.
+---
 
-**Milestone 7** (scale-up: 42 images, SmolVLM-256M and 500M, leave-one-trace-out, bootstrap CIs) establishes the
-dense-read per-layer dynamic win under a pass rule fixed in advance: -22.3% (256M) / -23.4% (500M) energy vs static
-modality at neutral quality, break-even reconfiguration cost about 50x, thresholds transfer across sizes, and no win
-under sparse (top-10%) reads. **Milestone 8** checks it against a non-oracle importance signal (robust to noise,
-staleness and sampling, but not to one score per token) and against the real model's output with INT4 actually
-applied (dynamic placement changes the next-token distribution 21.8% less than static, 9.4x less than random
-placement of the same size). The write-up is in `paper/` (`main.tex`, `main.pdf`).
+## 2. Headline results
 
-**Milestone 9** (computation placement under explicit resources, and access regimes) answers the task statement's own framing -- "decide where
-computation should take place from the location, movement, reuse and characteristics of data", with memory, compute, data movement,
-placement and runtime decisions interacting in the simulation. `src/kvtier/system.py` adds finite bus channels, host lanes and CIM units, work
-packets, migration traffic over the same bus, a runtime compute scheduler (`tier` / `host` / `adaptive` spill) and three access regimes
-(reusable, streaming, random); it reduces exactly to the original simulator in a degenerate configuration (`tests/test_system.py`).
-Findings (see NOTES.md for the full scorecard, including two pre-specified criteria that were missed): tiering moves 11.8x fewer bus bytes than
-flat at 0.64x its makespan (M2's +34% serial latency was an artefact); computing every WARM read in memory is up to 5x slower than flat when CIM
-units are scarce, and an adaptive spill scheduler beats both fixed choices on makespan; the dynamic policy saves 27% energy for reusable data,
-is inert for streamed data, and under random access loses up to +82% energy at 10x migration cost unless gated by observed reuse (the gate
-leaves +1 to +2%). The bottom-up migration cost is ~1.05 HOT accesses (vs the assumed 10x); the break-even is ~45x. The paper is
-`paper/main.pdf` (18 pages).
+All numbers come from the CSVs in `results/` (per-simulation rows and summaries). Intervals are paired-bootstrap 95% CIs in the paper.
 
-## Repository structure
+| # | Result |
+|---|---|
+| E1 | On a *synthetic* trace, dynamic placement trades energy for quality against static modality tiering. |
+| E2 | **Negative:** that trade-off does **not** replicate on real attention (visual tokens get only ~6% of attention). |
+| E3–E4 | Per-(token, layer) entries with dense reads recover a win; a cross-validated layer/role-aware *static* baseline cannot match it, so it is per-entry information, **not** a layer prior (a falsification test). |
+| E5 | 42 images, SmolVLM-256M and 500M, leave-one-trace-out: dynamic placement lowers energy **−22.3% / −23.4%** vs static modality at neutral quality (dense reads, 10× migration cost). Thresholds transfer between sizes; break-even ≈ 50× migration cost; **no win under sparse (top-10%) reads**. |
+| E6 | Robust to noisy, stale or sampled importance (−18.6 to −21.8%), **not** to one score per token (−7.6%). |
+| E7 | With INT4 applied inside the real model, dynamic placement changes the next-token distribution **21.8% less** than static tiering and **9.4× less** than random placement of the same size. |
+| E8 | Under contention, tiering moves **11.8× fewer bus bytes** at **0.64× the makespan** of a flat memory (the earlier serial-model "+34% latency" was an artefact). Always computing in memory is up to **5× slower** than flat with 2 CIM units; an **adaptive spill scheduler beats both** fixed choices. Bottom-up migration cost ≈ **1.05 HOT accesses** (vs the assumed 10×). |
+| E9 | Reusable data: **−27.4%** energy. Streamed data: policy is inert (no entry is read twice, so nothing repays a move). Random access: up to **+82% energy** at 10× migration cost unless migrations are priced against observed reuse; the reuse gate leaves **+1 to +2%** and **misses our pre-specified criterion**. Break-even ≈ 45× the bottom-up cost. |
+
+**What did not work (reported in the paper, not hidden):** the synthetic-trace win (E2); the layer-prior explanation (E4); one-score-per-token importance (E6); two pre-specified E9 criteria — H9c and the second half of H9d (scorecard in `NOTES.md` and paper Table 8). A minimum-age variant of the reuse gate was added *after* seeing those failures and is labelled post hoc — it is a diagnosis, not a headline result.
+
+---
+
+## 3. Repository layout
 
 ```
-kvtier-memcentric/
-  README.md, NOTES.md (lab notes, chronological), pyproject.toml
-  configs/default.yaml      # tier costs, trace generation, policy + reconfig parameters
-  src/kvtier/
-    kv_entry.py             # TokenKV dataclass, Modality enum, Tier enum
-    trace.py                # synthetic prefill+decode trace with attention weights
-    tiers.py                # HOT/WARM per-access latency + energy + quant-error model
-    policy.py               # Flat, StaticModality, DynamicHybrid, LayerModality policies
-    monitor.py              # live per-entry importance EMA (separate from trace.py's)
-    reconfig.py             # promotion/demotion cost model
-    simulator.py            # SimPy environment driving a trace through a policy (+ SparseAccess)
-    metrics.py              # energy/latency/quality/footprint aggregation
-    real_trace.py           # (M5/M6) real attention -> TraceSession, layer-averaged or per-layer
-    profile.py              # (M6b) group importance profiles for layer/role-aware static policies
-    estimators.py           # (M8) imperfect importance signals
-    system.py               # (M9) system model: CIM units, host lanes, bus, compute scheduler, access regimes
-  experiments/
-    validate_trace.py, run_flat_baseline.py, run_static_modality.py, run_dynamic_hybrid.py  # M1-M3
-    run_sensitivity.py, run_damping_sweep.py, make_plots.py                                 # M4/M4b
-    extract_vlm_trace.py, run_real_trace.py                                                 # M5
-    extract_vlm_layer_trace.py, run_m6.py, measure_int4_error.py                            # M6
-    run_layer_aware.py                                                                      # M6b
-    make_dataset.py, extract_many.py, run_m7.py, analyze_m7.py, run_m7_mechanism.py         # M7
-    run_m7_estimators.py, analyze_m8.py, validate_real_output.py, run_m7_part2.sh            # M8
-    run_m9.py, analyze_m9.py                                                                # M9
-  tests/                    # pytest (77)
-  data/                     # M7 image set (manifest.csv; COCO photos are third-party, re-downloadable)
-  traces/                   # real attention traces (*.npz; M7 under traces/<model-tag>/)
-  results/                  # CSVs and plots
-  report/                   # HTML report source (build.py + template.html + parts/), M1-M6b
-  paper/                    # research article (LaTeX), figure script, figures
+.
+├── README.md                this file
+├── NOTES.md                 lab notebook: chronological, with pre-specified hypotheses and scorecards
+├── pyproject.toml           package metadata and dependencies
+├── configs/default.yaml     tier costs, trace generation, policy and reconfiguration parameters
+├── src/kvtier/              the simulator package
+│   ├── kv_entry.py          KV entry (modality, tier, reads, age, reuse_rate)
+│   ├── trace.py             synthetic prefill+decode trace with attention weights (E1)
+│   ├── real_trace.py        real attention -> trace session (layer-averaged or per-layer)
+│   ├── tiers.py             HOT/WARM per-access latency, energy, quantisation-error model
+│   ├── policy.py            Flat, StaticModality, DynamicHybrid, LayerModality, ReuseAwareDynamic
+│   ├── monitor.py           live per-entry importance EMA (no look-ahead)
+│   ├── reconfig.py          lump-sum promotion/demotion cost (access-cost model)
+│   ├── simulator.py         access-cost SimPy simulator (E1–E7)
+│   ├── system.py            system model: bus, host lanes, CIM units, scheduler, regimes (E8–E9)
+│   ├── estimators.py        imperfect importance signals (E6)
+│   ├── profile.py           group importance profiles for layer/role-aware static policies (E4)
+│   └── metrics.py           energy / latency / quality / footprint aggregation
+├── experiments/             one script per experiment (see §5)
+├── tests/                   pytest suite, 77 tests
+├── data/manifest.csv        the 42-image set (names, kinds, prompts); photos are third-party and re-downloadable
+├── traces/                  real attention traces (*.npz) — see the note in §4
+├── results/                 all CSVs and plots, including the 3,402-row `m9_system.csv`
+├── report/                  HTML report source for the early milestones (M1–M6b)
+├── logs/                    run logs (not tracked in git)
+└── paper/
+    ├── main.tex, sec_*.tex, app_*.tex, fig_*.tex   the paper (LaTeX / TikZ)
+    ├── make_figures.py, make_tables.py             regenerate figures and appendix tables from results/
+    ├── figs/                                       figure PDFs
+    └── main.pdf                                    the built paper
 ```
 
-## Setup
+---
+
+## 4. Setup
+
+Python ≥ 3.11.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[dev]"          # simulator, analysis, tests
+pip install -e ".[vlm]"          # only to re-extract attention from the VLM (torch, transformers, pillow)
 ```
 
-## Running the Milestone 1 checkpoint
+Run the tests (they cover the simulator, policies, estimators, and — importantly — that `system.py` reproduces the original simulator exactly in a degenerate configuration):
 
 ```bash
-python experiments/validate_trace.py
+pytest                           # 77 passed
 ```
 
-This writes `results/importance_by_modality.png` and prints final average
-importance per group (TEXT, all VISUAL, salient VISUAL subset, non-salient
-VISUAL).
-
-## Running the Milestone 2 checkpoint
+**About the traces.** Real attention traces (`traces/s256/`, `traces/s500/`, ~230 MB) are large and are *not* in the git repository (see `.gitignore`); the submission zip includes them. If you cloned from git, either copy them in or regenerate them (needs the `vlm` extra, the SmolVLM weights from Hugging Face, and a GPU/MPS for speed):
 
 ```bash
-python experiments/run_flat_baseline.py
-python experiments/run_static_modality.py
+python experiments/make_dataset.py                  # downloads the 42 images listed in data/manifest.csv
+python experiments/extract_many.py                  # SmolVLM-256M traces -> traces/s256/
+python experiments/extract_many.py s500 HuggingFaceTB/SmolVLM-500M-Instruct mps float32   # 500M -> traces/s500/
 ```
 
-Each prints a summary (total latency, total energy, per-tier breakdown,
-final memory footprint) and writes its per-step time series to
-`results/*_timeseries.csv`. A combined comparison table is at
-`results/milestone2_baseline_comparison.csv`.
+---
 
-## Running the Milestone 3 checkpoint
+## 5. Reproducing each experiment
 
-```bash
-python experiments/run_dynamic_hybrid.py
-```
+Commands are run from the repository root. Simulation scripts are resumable.
 
-Prints the same summary as the baselines, plus reconfiguration overhead
-(latency, energy) broken out as its own line and the promotion/demotion
-counts. A combined comparison against both M2 baselines is at
-`results/milestone3_comparison.csv` — see the Status section above for
-what it currently shows.
+| Experiment | What it tests | Command |
+|---|---|---|
+| **E1** synthetic trace | dynamic vs static vs flat, with reconfiguration cost | `python experiments/validate_trace.py`, `run_flat_baseline.py`, `run_static_modality.py`, `run_dynamic_hybrid.py`, `run_sensitivity.py`, `make_plots.py` |
+| **E2** real attention | does E1 replicate? | `python experiments/extract_vlm_trace.py`, `run_real_trace.py` |
+| **E3** per-layer entries | sparse reads, measured INT4 error | `python experiments/extract_vlm_layer_trace.py`, `run_m6.py`, `measure_int4_error.py` |
+| **E4** falsification | is it just a layer prior? | `python experiments/run_layer_aware.py` |
+| **E5** scale-up | 42 images, two model sizes, leave-one-out CV | `python experiments/run_m7.py s256` · `run_m7.py s500` · `analyze_m7.py` · `run_m7_mechanism.py` |
+| **E6** non-oracle importance | noisy / stale / sampled / per-token signals | `python experiments/run_m7_estimators.py` · `analyze_m8.py` |
+| **E7** real-output check | INT4 applied in the model, KL of next-token distribution | `python experiments/validate_real_output.py 42 mps` |
+| **E8–E9** system model | compute placement under contention; reuse regimes | `python experiments/run_m9.py e8 e9 e9b e9c` · `analyze_m9.py` (3,402 simulations, ≈25 min on 7 cores) |
+| **Paper** | figures, tables, PDF | `python paper/make_figures.py && python paper/make_tables.py && cd paper && pdflatex main.tex && pdflatex main.tex` |
 
-## Tests
+`experiments/run_m7_part2.sh` and `run_overnight.sh` chain the long runs end to end.
 
-```bash
-pytest
-```
+E8–E9 only need `traces/s256/` and the config; they do not need the `vlm` extra. To re-check the E8–E9 numbers without re-simulating, `python experiments/analyze_m9.py` regenerates `results/m9_e8_summary.csv`, `m9_e9_summary.csv` and `m9_e9b_summary.csv` from `results/m9_system.csv`.
 
-## Cost-model assumptions (Milestone 1)
+---
 
-The HOT/WARM access-cost ratios in `configs/default.yaml` /
-`src/kvtier/tiers.py` are explicit, named constants rather than derived at
-runtime:
+## 6. Modelling choices and honest limitations
 
-- **Energy**: WARM's per-byte access energy is ~10x lower than HOT's, an
-  order-of-magnitude figure consistent with commonly cited compute-in-memory
-  / near-memory energy savings over conventional DRAM/HBM access + separate
-  compute.
-- **Latency**: WARM is ~1.5x slower per access than HOT, reflecting the
-  common CIM tradeoff where analog/near-memory compute adds latency overhead
-  even as it saves energy and data movement.
-- **Precision**: HOT stores entries at FP16 (2 bytes/element), WARM at INT4
-  (0.5 bytes/element), consistent with KV-cache quantization results in the
-  literature above (e.g. HybridKV, ZipVL).
+**Cost model.** All tier costs come from one stylised table (`configs/default.yaml`, paper Table "tiers"): WARM has ~10× lower energy per byte, ~1.5× higher per-access latency, and 0.5 vs 2 bytes per element. They are ratios in the range of commonly cited CIM/near-memory figures, **not a specific device**, so absolute energies are not hardware claims. What the study supports is *ratios between policies under one shared cost model* and how those ratios move when the assumptions move.
 
-## Cost-model assumptions (Milestone 3)
+**Two simulators, on purpose.**
+- *Access-cost model* (`simulator.py`, E1–E7): the tier implies the compute site, latencies are summed serially, a migration is a lump-sum multiple of a HOT access.
+- *System model* (`system.py`, E8–E9): finite bus channels, host lanes and CIM units; 64-entry work packets; a per-step barrier; migration traffic shares the bus and uses a host lane; schedulers `tier` / `host` / `adaptive`. With `SystemConfig.legacy()` it reduces to the first simulator to 1e-9 relative error (unit test), so everything new is an addition, not a re-parameterisation.
 
-`configs/default.yaml`'s `policy.dynamic_hybrid` and `reconfig` blocks,
-also explicit named constants:
+**Quality.** Quality loss is an attention-weighted INT4 error proxy; E7 checks it against the real model's next-token distribution.
 
-- **Promotion/demotion thresholds**: `promote_threshold=0.006`,
-  `demote_threshold=0.002` on the live importance EMA. Chosen relative to
-  Milestone 1's validation plot, where salient visual tokens converge to
-  ~0.0088 and average TEXT to ~0.005-0.006 — i.e. promotion is meant to
-  trigger around text-level importance or higher. The hysteresis band
-  between them turned out not to be wide enough to suppress
-  recency-driven promotion churn on the default trace; see the Status
-  section above.
-- **Reconfiguration cost multiplier**: `10.0` — a tier move (read +
-  requantize + write) costs 10x a single HOT access, in both latency and
-  energy, applied identically regardless of direction (`reconfig.py`).
+**Evaluation discipline.** Leave-one-trace-out cross-validation, paired-bootstrap CIs, and pass criteria written in `NOTES.md` before the corresponding runs (self-imposed, not an external registration). E8–E9 hypotheses H8a–H9e were written after the runs were launched and before any result was inspected. Fixed thresholds (8× / 0.4× of uniform attention) were chosen in E5 and never re-tuned for E8–E9.
 
-## Milestone plan
+**Limitations.**
+- No real hardware or CIM data; the migration cost is derived bottom-up from the *same* stylised table, so it cannot independently corroborate the other assumptions.
+- Narrow workload: one model family (SmolVLM-256M and 500M), 42 images, short sessions.
+- The streaming and random regimes are **overlays on real attention traces**, not natively streamed or randomly accessed workloads.
+- Dynamic placement is **not regret-free** under random access, even when migration is cheap.
+- The reference list in the paper was written from memory and has not been checked against the sources.
 
-1. **Synthetic trace + tier cost model** (no simulator) — done.
-2. **SimPy simulator + flat and static-modality baselines** — done.
-3. **Dynamic hybrid policy + reconfiguration cost**, with promotion/demotion
-   counts and reconfiguration overhead broken out as their own metric — done.
-4. **Comparison, visualization, sensitivity** — done: bar charts of total
-   energy/latency across the three policies, a tier-over-time timeline plot,
-   and a sensitivity sweep over thresholds and reconfiguration penalty
-   showing how the dynamic hybrid's advantage shrinks as reconfiguration
-   cost grows.
-5. **Real VLM attention traces** (stretch) — done, see NOTES.md — replace the synthetic trace with
-   real attention weights hooked from a small open VLM, plus an oracle
-   comparison against ground-truth top-k attended tokens.
-# KV-Cache-Tier
+---
+
+## 7. Development history
+
+| Milestone | Content | Experiment |
+|---|---|---|
+| M1 | Synthetic trace and tier cost model | E1 |
+| M2 | SimPy simulator, flat and static-modality baselines | E1 |
+| M3–M4 | Dynamic hybrid policy with reconfiguration cost; quality penalty; sensitivity sweeps | E1 |
+| M5 | Real attention traces from SmolVLM-256M | E2 |
+| M6 / M6b | Per-(token, layer) entries, sparse reads, measured INT4 error; layer-aware static baseline | E3, E4 |
+| M7 | Scale-up to 42 images, 256M + 500M, leave-one-trace-out, bootstrap CIs | E5 |
+| M8 | Non-oracle importance; real-output validation; first paper | E6, E7 |
+| M9 | System model with compute resources, data movement and scheduler; three access regimes; reframed as TANDEM | E8, E9 |
+
+`git log` has one commit per milestone; `NOTES.md` records every observation and deviation in order.
