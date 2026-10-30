@@ -4,7 +4,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage[margin=2.35cm,top=2.4cm,bottom=2.4cm]{geometry}
 \usepackage[expansion=false]{microtype}
-\usepackage{graphicx,booktabs,multirow,amsmath,amssymb,xcolor,enumitem,caption,subcaption}
+\usepackage{graphicx,booktabs,multirow,amsmath,amssymb,xcolor,enumitem,caption,subcaption,array}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric,backgrounds}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
@@ -21,7 +21,7 @@
 \newcommand{\warm}{\textsc{warm}}
 \newcommand{\pj}{\,pJ}
 
-\title{\vspace{-0.6cm}\textbf{When Does Importance-Aware Tiering of Multimodal KV Caches Pay Off?\\ A Hypothesis-Driven Simulation Study on Real Vision-Language Attention}}
+\title{\vspace{-0.6cm}\textbf{Where Should Attention Run?\\ Data-Local Computation Placement for Multimodal KV Caches}\\[3pt]{\large\emph{A hypothesis-driven simulation study on real vision-language attention}}}
 \author{Sudarshan Sudhakar\\ \small Independent research. Code, traces and all result tables: \texttt{KV-Tier} repository}
 \date{}
 
@@ -30,37 +30,63 @@
 \vspace{-0.9cm}
 
 \begin{abstract}
-Vision-language models (VLMs) turn each image into hundreds of visual tokens, and the key--value (KV) cache they create dominates memory traffic during decoding. Algorithmic work compresses this cache but assumes one flat memory. We ask the \emph{architecture} question instead: should KV entries of different importance live in different memory tiers, and what does moving an entry between tiers cost? We model a two-tier system, a conventional FP16 \hot{} tier and a compute-in-memory INT4 \warm{} tier, driven by a live per-entry importance estimate and a hysteretic promote/demote policy that pays an explicit reconfiguration cost. The study is a chain of seven experiments in which each result motivates the next. Policy gains found on synthetic attention \emph{did not replicate} on real SmolVLM attention; the effect appeared only when entries were modelled per (token, layer); a layer/role prior was tested as the explanation and falsified; and the effect was then established on 42 images (natural photos, charts, documents) and two model sizes under a rule fixed in advance. With dense reads and a $10\times$ reconfiguration cost, the dynamic policy lowers energy by \textbf{22.3\%} (95\% CI 21.9--22.8) on SmolVLM-256M and \textbf{23.4\%} on SmolVLM-500M relative to static modality tiering, at neutral quality, and thresholds transfer across model sizes unchanged. The saving survives a reconfiguration cost up to about $20\times$ and breaks even near $50\times$. It vanishes under sparse (top-10\%) attention reads. Two checks address the strongest objections to a simulation study. The saving is robust to a degraded importance signal (noise, stale, or sampled every 8th step: $-18.6$ to $-21.8\%$) but not to collapsing it to one score per token ($-7.6\%$). With INT4 actually applied inside SmolVLM-256M, the dynamic placement changes the next-token distribution \textbf{21.8\% less} than static modality (KL, lower on 37 of 42 images) and \textbf{9.4$\times$ less} than random placement of the same number of INT4 entries.
+A memory-centric architecture should decide where computation runs from the location, movement, reuse and error tolerance of the data, and the run-time cost of making that decision must be shown to be worth paying. We study this on the key--value (KV) cache of vision-language models (VLMs), whose decode-time reads dominate memory traffic. The memory has a \hot{} tier (FP16 DRAM/HBM, host compute) and a \warm{} tier (INT4 compute-in-memory). A runtime makes two decisions from live importance and reuse estimates: \emph{data placement} (which tier an entry occupies, changed by a paid migration) and \emph{computation placement} (whether a \warm{} read runs in memory or on the host). The study is a chain of nine experiments on real SmolVLM attention (42 images, two model sizes) in which each result motivates the next and failures are kept: a synthetic-trace win did not replicate on real attention, and a layer-prior explanation was falsified. With dense reads and a $10\times$ migration cost, dynamic data placement lowers energy by \textbf{22.3\%} (256M) and \textbf{23.4\%} (500M) against static modality tiering at neutral quality, breaks even near $50\times$ migration cost, and vanishes under sparse reads. It survives noisy, stale or sampled importance, and with INT4 applied inside the model it changes the next-token distribution 21.8\% less than static tiering and $9.4\times$ less than random placement. A system-level model with finite CIM units, host lanes and a shared bus then shows that tiering moves $11.8\times$ fewer bytes than a flat memory at $0.64\times$ its makespan (the serialised model's $+34\%$ latency was an artefact); that always computing in memory is up to $5\times$ slower than a flat memory when CIM units are scarce; and that an adaptive scheduler that spills to the host beats both fixed choices on makespan. Finally, the right placement depends on reuse: dynamic placement saves 27\% energy for reusable data (bottom-up migration cost), is inert for streamed data, and under random access loses up to $+82\%$ energy unless migrations are priced against observed reuse. A reuse gate removes most but not all of that loss ($+1$ to $+2\%$), narrowly missing our pre-specified parity criterion.
 \end{abstract}
 
-\noindent\textbf{Keywords:} KV cache $\cdot$ vision-language models $\cdot$ tiered memory $\cdot$ compute-in-memory $\cdot$ memory-centric architecture $\cdot$ negative results.
+\noindent\textbf{Keywords:} memory-centric computing $\cdot$ computation placement $\cdot$ compute-in-memory $\cdot$ KV cache $\cdot$ vision-language models $\cdot$ data movement $\cdot$ negative results.
 
 \section{Introduction}
-A vision-language model prefills an image as hundreds to thousands of visual tokens. Each token adds a KV entry in every transformer layer, and during autoregressive decoding every new token reads that cache again. For long multimodal contexts the cache, not the arithmetic, sets the energy and bandwidth bill. A large body of recent work shrinks the cache by pruning, quantizing or merging visual tokens~\cite{vlcache,zipvl,aircache,topv,fastv}. All of it assumes a flat, undifferentiated memory and decides only \emph{what to discard}.
+In a memory-centric architecture the question is not only \emph{where data lives} but \emph{where the computation on it runs}: next to the data, in a compute-in-memory (CIM) array, when that avoids moving bytes, and on conventional compute when that is faster or more accurate. The right choice depends on properties of the data that change at run time: how often it is reused, whether it is streamed through once or accessed at random, and how much error a computation on it can tolerate. A fixed rule cannot be right for all of these, so the placement must be decided by the runtime, and the decision itself (observing, migrating data, scheduling work, contending for shared resources) has an overhead that must be shown to be worth paying.
 
-We study the complementary architectural question. If entries differ in how much attention they receive, should they also differ in \emph{where they live}? We consider a memory with a \hot{} tier (conventional DRAM/HBM, FP16, lossless) and a \warm{} tier (compute-in-memory, INT4, lower energy per byte, slower per access, lossy). Placing a lightly attended entry in \warm{} saves energy; placing a heavily attended one there costs quality. Importance changes as decoding proceeds, so a policy may \emph{move} entries, but every move is paid for. The design question is whether live, per-entry placement beats the simple static rule ``visual tokens in \warm{}, text in \hot{}'', and under which conditions.
+We study this problem on a concrete, data-intensive workload: the key--value (KV) cache of a vision-language model (VLM). A VLM prefills an image as hundreds to thousands of visual tokens; each token adds a KV entry in every transformer layer, and every generated token reads that cache again. For long multimodal contexts the cache, not the arithmetic, sets the energy and bandwidth bill. A large body of recent work shrinks the cache by pruning, quantizing or merging visual tokens~\cite{vlcache,zipvl,aircache,topv,fastv}, and all of it assumes a flat memory and decides only \emph{what to discard}. We ask the architectural question instead (Table~\ref{tab:map} states how the workload instantiates the general problem). The memory has a \hot{} tier (conventional DRAM/HBM, FP16, lossless; reads are computed on the host) and a \warm{} tier (INT4 CIM arrays: lower energy per byte, slower, lossy; reads are computed in memory). A runtime makes two decisions: \emph{data placement} (which tier each (token, layer) entry occupies, changed by paying for a migration) and \emph{computation placement} (whether a read of \warm{}-resident data runs in memory or is pulled to the host). Both decisions interact through finite CIM units, host lanes and a shared bus, and both are driven by live observations of importance and reuse.
 
-\paragraph{Approach.} We build a SimPy simulator with an explicit cost model for access, quantization error and tier moves, and we feed it \emph{real} decode-time attention extracted from SmolVLM. We treat the work as a sequence of falsifiable hypotheses. Each experiment is motivated by the weakness of the previous one (Fig.~\ref{fig:roadmap}). Selection rules and success criteria were written in the lab notes before the corresponding runs (a self-imposed discipline, not an external registration), and every deviation from them is logged.
+\begin{table}[t]
+\centering\small
+\caption{How this study instantiates the memory-centric placement problem.}
+\label{tab:map}
+\begin{tabular}{>{\raggedright\arraybackslash}p{4.0cm}>{\raggedright\arraybackslash}p{11.4cm}}
+\toprule
+Requirement & In this work\\
+\midrule
+Placement depends on location, movement, reuse, data characteristics &
+Location = tier of each entry; movement = bytes on the shared bus (reads, spills, partial sums, migrations); reuse = observed read frequency; characteristics = attention importance and tolerance to INT4 error.\\
+Compute near data when beneficial, conventional compute otherwise &
+\warm{} reads run on CIM units, \hot{} reads on host lanes; a scheduler may spill \warm{} reads to the host (Sec.~\ref{sec:e8}).\\
+Memory, compute, movement, placement and runtime decisions interact explicitly &
+SimPy model with finite bus channels, host lanes and CIM units, work packets, a per-step barrier, and migration traffic that competes with reads (Sec.~\ref{sec:sys}).\\
+Feasibility and overhead of dynamic placement &
+Migration cost derived bottom-up and swept to 50$\times$ (E5, E9b); estimator imperfection (E6); contention, spill and utilisation (E8).\\
+Different data need different placement &
+Reusable, streamed and randomly accessed reads, on real attention (E9); sparse top-$k$ reads (E5).\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Approach.} We build SimPy simulators with explicit models of access cost, quantization error, tier moves and (for E8--E9) compute resources and data movement, and we feed them \emph{real} decode-time attention extracted from SmolVLM. We treat the work as a sequence of falsifiable hypotheses. Each experiment is motivated by the weakness of the previous one (Fig.~\ref{fig:roadmap}). Selection rules and success criteria were written in the lab notes before the corresponding runs (a self-imposed discipline, not an external registration), and every deviation from them is logged.
 
 \paragraph{Contributions.}
 \begin{enumerate}[leftmargin=1.3em]
-\item A reconfiguration-aware, quality-aware simulator for modality- and importance-aware KV placement, with a measured (not assumed) INT4 error and a linearity property that makes reconfiguration cost an exact post-hoc parameter.
+\item A formulation of KV-cache placement as a \emph{joint data- and computation-placement} problem, and two SimPy simulators of it: an access-cost model (E1--E7) and a system model with finite CIM units, host lanes, a shared bus, work packets, migration traffic and a compute scheduler (E8--E9), which reduces exactly to the first (unit test).
 \item A negative result with a diagnosis: the synthetic-trace win does not replicate on real attention, because real visual tokens receive only $\sim$6\% of attention mass; the win appears at per-(token, layer) granularity and is \emph{not} explained by a layer or role prior (a static profile is $16$--$26\%$ worse in quality at matched energy).
-\item A pre-specified scale-up (42 images, three image kinds, two model sizes, leave-one-trace-out selection, bootstrap CIs) establishing \textbf{$-22$ to $-23\%$ energy at neutral quality} for dense reads, with a cost break-even near $50\times$ and a clear failure region (sparse reads).
-\item Two checks aimed at the strongest objections to a simulation study: robustness to a \emph{non-oracle} importance signal (Sec.~\ref{sec:est}) and agreement of the quality proxy with \emph{measured} changes in the real model's output distribution when INT4 is actually applied (Sec.~\ref{sec:real}).
+\item A pre-specified scale-up (42 images, three image kinds, two model sizes, leave-one-trace-out selection, bootstrap CIs): \textbf{$-22$ to $-23\%$ energy at neutral quality} for dense reads, break-even near $50\times$ migration cost, and a clear failure region (sparse reads).
+\item Two checks aimed at the strongest objections to a simulation study: robustness to a \emph{non-oracle} importance signal (E6) and agreement of the quality proxy with \emph{measured} output change when INT4 is applied in the real model (E7).
+\item Evidence that the compute-site decision is first-order under contention (E8), including a correction of an earlier result that was an artefact of serial latency, and a bottom-up migration cost ($\approx\!1.05$ \hot{} accesses) in place of the assumed $10\times$.
+\item Evidence that placement should depend on data reuse (E9): reusable, streamed and randomly accessed data, with pre-specified hypotheses of which two fail narrowly and are reported as such.
 \end{enumerate}
 
 \begin{figure}[t]
 \centering
 \input{fig_roadmap.tex}
-\caption{The study as a chain of hypotheses. Each box states the question, the finding, and (on the arrow) the weakness that forced the next experiment. Red marks the two results that overturned an earlier belief.}
+\caption{The study as a chain of hypotheses. Each box states the question, the finding, and (on the arrow) the weakness that forced the next experiment. Red marks results that overturned an earlier belief (E2, E4) or missed a pre-specified criterion (E9).}
 \label{fig:roadmap}
 \end{figure}
 
 \section{Related Work}
 \paragraph{Algorithm-level visual KV compression.} VL-Cache~\cite{vlcache} (modality- and sparsity-aware budgeting), ZipVL~\cite{zipvl} (dynamic token sparsification), AirCache~\cite{aircache} and TopV~\cite{topv} (inter-modal relevance and token pruning) and FastV~\cite{fastv} (early-layer visual token pruning) show that visual tokens are, on average, less important to decoding than text tokens and can be compressed with small accuracy loss. For text LLMs, H2O~\cite{h2o} and SnapKV~\cite{snapkv} keep heavy-hitter entries, StreamingLLM~\cite{streaming} keeps attention sinks plus a recent window, KIVI~\cite{kivi} quantizes the cache to 2 bits, and Quest~\cite{quest} reads only query-relevant pages. These methods \emph{discard or shrink}. We instead ask where an entry should reside and what it costs to move it, a question they do not pose because their memory is flat.
 
-\paragraph{Memory systems for LLM serving.} PagedAttention~\cite{vllm} manages KV memory in fixed blocks, and a growing set of near-/in-memory accelerators target attention (single-tier, not modality-aware). Our contribution is orthogonal: a reconfiguration-cost model for \emph{moving} entries between a high-fidelity tier and a low-energy lossy tier, evaluated on real attention, with the conditions under which it fails.
+\paragraph{Memory-centric and in-memory computing.} The case for computing where the data is, because moving data dominates energy, is made in the processing-in-memory literature~\cite{mutlu19}, and commercial DRAM-based PIM exists~\cite{hbmpim}. Recent proposals place the attention stage of LLM decoding on in-/near-memory units~\cite{attacc,neupims}. We do not compare against these designs. Our question is the runtime one they leave open in the setting we study: given data whose importance and reuse change during execution, and in-memory units that are finite and lossy, \emph{which data should be resident where, which reads should run in memory, and what do the observation and migration cost?}
+
+\paragraph{Memory systems for LLM serving.} PagedAttention~\cite{vllm} manages KV memory in fixed blocks. Our contribution is orthogonal: a migration-cost model for \emph{moving} entries between a high-fidelity tier and a low-energy lossy tier, a compute-site scheduler, and an evaluation on real attention under three access regimes, with the conditions under which dynamic placement fails.
 
 \paragraph{Positioning.} Our access-cost constants are stylised ratios (Table~\ref{tab:tiers}), not a specific device, so absolute energies are not claims about hardware. What the study can support are \emph{ratios between policies under one shared cost model} and the sensitivity of those ratios to the assumptions that matter.
 
@@ -71,7 +97,7 @@ A decode session has a prefill of $n_p$ tokens (visual or text) followed by $T{=
 \begin{figure}[t]
 \centering
 \input{fig_arch.tex}
-\caption{System model. A decode trace supplies, per step, the attention each entry receives. Reads are charged to the entry's current tier. The live importance monitor sees only past weights, never the future. The policy may request a tier change, which the reconfiguration manager charges at a multiple of a \hot{} access. Quality is accounted separately from energy and latency.}
+\caption{System model. A decode trace supplies, per step, the attention each entry receives. The monitor (past steps only) tracks importance and read counts. Two runtime decisions follow: where each entry's data lives (tier; changed by migrations, which are priced as bus and host-lane traffic) and where each read is computed (in \warm{}'s CIM units, or on the host after pulling the bytes over the bus). All reads, partial sums and migrations share the finite bus; quality is accounted separately from energy and latency.}
 \label{fig:arch}
 \end{figure}
 
@@ -107,19 +133,49 @@ which is verified by a unit test. We therefore simulate once at $m{=}1$ and obta
 \subsection{Baselines and metrics}
 \textbf{Flat}: everything in \hot{}. \textbf{Static modality}: visual in \warm{}, text in \hot{}, never moved; this is the strong baseline throughout and all results are percentages \emph{relative to it}, per trace. \textbf{Static layer/role profile}: groups of (modality or role) $\times$ layer placed in \hot{} when their mean importance exceeds a threshold, fixed offline (Sec.~\ref{sec:m6b}). We report total energy, serialised latency, the quality proxy, and the number of tier moves. \textbf{Sparse reads} (Sec.~\ref{sec:layers}) read only the top-$k\%$ entries by live importance plus entries created in the last step.
 
+\subsection{Compute resources, data movement and runtime scheduling (system model)}
+\label{sec:sys}
+Experiments E1--E7 use the access-cost model above: the tier implies the compute site, latencies are summed serially and a migration is a lump-sum multiple of a \hot{} access. That isolates the data-placement question but cannot show contention, data movement or a choice of compute site. E8--E9 therefore use a second model (\texttt{system.py}; the first simulator is untouched so E1--E7 stay reproducible) in which resources are explicit and shared (Fig.~\ref{fig:arch}, Tab.~\ref{tab:sys}).
+
+\begin{table}[t]
+\centering\small
+\caption{System model parameters (defaults used in E8--E9 unless a sweep says otherwise). Tier access costs are those of Tab.~\ref{tab:tiers}.}
+\label{tab:sys}
+\begin{tabular}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{11.8cm}}
+\toprule
+Element & Model\\
+\midrule
+Resources & 8 memory-bus channels, 8 host compute lanes, 16 CIM units (swept 2--64 in E8). Work is issued as packets of 64 entries; a packet occupies one unit of a resource at a time and queues FIFO.\\
+\hot{} read (host) & occupies a bus channel for the \hot{} access latency (movement), then a host lane for 2 ns/entry (MACs). Energy: \hot{} access energy.\\
+\warm{} read in memory & occupies a CIM unit for the \warm{} access latency; returns a 32 B partial sum per packet over the bus. Energy: \warm{} access energy plus the partial-sum transfer.\\
+\warm{} read on host (``spill'') & pulls the INT4 bytes over the bus at the \hot{}-path cost, then dequantises (1 ns, 10 pJ/entry) and computes on a host lane. The data stay INT4, so the quality loss is the same.\\
+Scheduler & \texttt{tier}: \warm{} reads run in memory; \texttt{host}: \warm{} is compressed storage only; \texttt{adaptive}: each \warm{} packet goes where the estimated finish time (from the work already assigned in this step) is earlier.\\
+Tier move (migration) & reads the source tier, requantises and updates metadata (14 ns on a host lane, 60 pJ) and writes the destination tier, all over the bus. This bottom-up cost is $\approx\!1.05\times$ one \hot{} access, versus the $10\times$ assumed in E1--E7; \texttt{reconfig\_scale} scales it.\\
+Step semantics & Reads of a step are issued together and the step ends at the last packet (a barrier); moves are then issued and also complete before the next step. Energy is additive; latency is the makespan.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Regression anchor.} With one global server, no compute time, no partial-sum traffic and the lump-sum migration cost, the model reproduces the first simulator's energy, latency, quality and move counts to $10^{-9}$ relative error for the flat, static and dynamic policies (unit test). Everything new is therefore an addition, not a re-parameterisation.
+
+\paragraph{Access regimes.} The attention weights are always the real ones; a regime says which entries are \emph{read}. \emph{Reusable}: all active entries every step (as in all earlier experiments). \emph{Streaming}: the prefill is consumed once, in order, $\lceil n_p^{\text{tok}}/T\rceil$ tokens per step, plus the newest token, so every entry is read once. \emph{Random}: a uniformly random 3\%, 10\% or 30\% of entries per step, redrawn each step, plus the newest token. Weight on unread entries is reported as skipped mass (identical for all placement policies, so comparisons within a regime are fair). The monitor sees only what is read: an unread entry's importance is not updated. These regimes are access-pattern \emph{overlays} on real attention, not separate real workloads, which we list as a limitation.
+
+\paragraph{Reuse-aware placement.} The runtime counts how often an entry was read ($\text{reuse}=\text{reads}/\text{age}$). A migration of cost $R$ that saves $G$ per read repays only if the entry is read at least $R/G$ more times; $R/G$ is computed from the cost model (1.08 reads at the bottom-up cost, 10.8 at $10\times$ that). The \emph{reuse-aware} policy is the dynamic policy with moves suppressed unless $\text{reuse}\times 32\ \text{steps}\ge R/G$. With dense reads $\text{reuse}=1$ and it is identical to the dynamic policy (unit test).
+
 \section{Evaluation Protocol}
 \label{sec:protocol}
 Because the policy has free thresholds, the main risk is fitting them to the test set. We adopted three rules and kept them across milestones.
 \begin{enumerate}[leftmargin=1.3em]
 \item \textbf{Selection rule.} Thresholds $(\theta_\uparrow,\theta_\downarrow)$ are the pair with the lowest mean energy among those whose mean quality loss is no worse than static modality's on the \emph{training} traces (fallback: lowest quality loss).
 \item \textbf{Held-out evaluation.} Milestone 5--6: fit on two traces, test on the third. Milestone 7--8: \emph{leave-one-trace-out} over all 42 traces. Results are held-out means.
-\item \textbf{A fixed pass criterion for the headline claim} (written before the 42-image runs): mean held-out energy saving $\ge 10\%$; mean quality-loss change $\le +2\%$; paired-bootstrap 95\% CI of the energy saving excludes 0; the sign holds in each of the three image kinds. Anything weaker is reported as ``not established''.
+\item \textbf{A fixed pass criterion for the headline claim} (written before the 42-image runs; for E8--E9 the hypotheses H8a--H9e and their criteria were written in the lab notes after the runs were launched but before any result was inspected, Tab.~\ref{tab:score}): mean held-out energy saving $\ge 10\%$; mean quality-loss change $\le +2\%$; paired-bootstrap 95\% CI of the energy saving excludes 0; the sign holds in each of the three image kinds. Anything weaker is reported as ``not established''.
 \end{enumerate}
-Deviations from pre-set plans are stated where they occur: the choice of damping rule (Sec.~\ref{sec:synth}), the change of thresholds to multiples of uniform attention after the first real-data failure (Sec.~\ref{sec:real5}), and the widening of the threshold grid after every fold chose the grid corner (Sec.~\ref{sec:scale}).
+Deviations from pre-set plans are stated where they occur: the choice of damping rule (Sec.~\ref{sec:synth}), the change of thresholds to multiples of uniform attention after the first real-data failure (Sec.~\ref{sec:real5}), the widening of the threshold grid after every fold chose the grid corner (Sec.~\ref{sec:scale}), and the minimum-age variant of the reuse gate, added after H9c failed and labelled post hoc (Sec.~\ref{sec:e9}). E8--E9 do not re-tune thresholds: the E5 choice ($8\times/0.4\times$) is used throughout.
 
 \paragraph{Data.} Three locally generated images (chart, scene, noise+label) for Milestones 5--6; 42 images for Milestone 7--8 (24 COCO val2017 photos~\cite{coco}, 10 matplotlib charts, 8 rendered text documents), each with a task prompt. Models: SmolVLM-256M-Instruct (primary) and SmolVLM-500M-Instruct~\cite{smolvlm}. Per image, we greedy-decode 64 tokens and record, at every step, the head-averaged attention row of every layer (30 layers for 256M). The generated text was checked to confirm the model uses the image.
 
 \section{Experiments, in the Order They Built on One Another}
+The first seven experiments (E1--E7) use the access-cost model of Sec.~3 (the tier implies the compute site; latency is serialised) and ask where \emph{data} should live. E8--E9 use the system model of Sec.~\ref{sec:sys} and ask where \emph{computation} should run and how the answer depends on data reuse.
 
 \subsection{E1 --- Synthetic traces: is dynamic placement worth its reconfiguration cost?}
 \label{sec:synth}
@@ -246,10 +302,13 @@ Setting & Energy & Quality loss & Selected $\theta_\uparrow/\theta_\downarrow$ &
 \input{sec_m8a.tex}
 \input{sec_m8b.tex}
 
-\section{Discussion}
-\paragraph{What is established.} For dense per-layer reads, under one stylised but fixed cost model, importance-driven placement beats the strong static-modality baseline by $\sim$22--23\% energy at neutral quality on two model sizes and three image kinds, with thresholds that transfer across sizes and a break-even reconfiguration cost about five times the default. The saving is produced by demoting individual prompt-text entries whose importance is low \emph{in this prompt}, and the promotions that give quality back are few. The two added checks narrow the main objections: the gain does not require an oracle (it survives noisy, stale or sampled importance, provided importance stays per (token, layer)), and it is not an artefact of the quality proxy (when INT4 is applied in the real model, the policy keeps in \hot{} the entries that matter: its output divergence is 21.8\% below static modality's and 9.4$\times$ below random placement's). They do not replace hardware measurement, and neither the estimator's own cost nor a concrete approximate scorer is modelled.
+\input{sec_m9a.tex}
+\input{sec_m9b.tex}
 
-\paragraph{Where it does not apply.} (i) Sparse reads: with top-10\% reads the policy is a net loss and the \hot{}/\warm{} headroom itself shrinks to $\sim$2$\times$. (ii) Reconfiguration costs above roughly $50\times$ a \hot{} access. (iii) Coarse-grained placement: a static layer or role map cannot reproduce the effect. These boundaries are as much a part of the finding as the saving.
+\section{Discussion}
+\paragraph{What is established.} For dense per-layer reads, under one stylised but fixed cost model, importance-driven placement beats the strong static-modality baseline by $\sim$22--23\% energy at neutral quality on two model sizes and three image kinds, with thresholds that transfer across sizes and a break-even reconfiguration cost about five times the default. The saving is produced by demoting individual prompt-text entries whose importance is low \emph{in this prompt}, and the promotions that give quality back are few. The two added checks narrow the main objections: the gain does not require an oracle (it survives noisy, stale or sampled importance, provided importance stays per (token, layer)), and it is not an artefact of the quality proxy (when INT4 is applied in the real model, the policy keeps in \hot{} the entries that matter: its output divergence is 21.8\% below static modality's and 9.4$\times$ below random placement's). They do not replace hardware measurement, and neither the estimator's own cost nor a concrete approximate scorer is modelled. Under explicit resources (E8) the result holds and is stronger than in the serial model ($-27.4\%$ at the bottom-up migration cost, with $11.8\times$ fewer bytes on the bus than flat), but the compute-site decision it rests on is first-order: with scarce CIM units, computing every \warm{} read in memory is up to $5\times$ slower than not tiering at all, and a scheduler that spills to the host is better than either fixed choice. Whether data placement should be dynamic depends on reuse (E9).
+
+\paragraph{Where it does not apply.} (i) Sparse reads: with top-10\% reads the policy is a net loss and the \hot{}/\warm{} headroom itself shrinks to $\sim$2$\times$. (ii) Reconfiguration costs above roughly $50\times$ a \hot{} access. (iii) Coarse-grained placement: a static layer or role map cannot reproduce the effect. (iv) Read-once (streamed) data: nothing can repay a migration and the right decision is the initial placement. (v) Sparsely and randomly read data: the dynamic policy is not regret-free even at the bottom-up migration cost (quality $+3.9$ to $+5.7\%$ against static at 30\% and 10\% reads), and at $10\times$ it loses up to $+82\%$ energy; a reuse gate removes most but not all of that. These boundaries are as much a part of the finding as the saving.
 
 \paragraph{Why the negative results stayed in.} E2 and E4 overturned beliefs we held (that the synthetic trade-off was general; that the win was a layer effect). Keeping them is what makes the later claim credible: the scale-up in E5 was designed to be able to fail, and the criterion was fixed beforehand.
 
@@ -257,15 +316,16 @@ Setting & Energy & Quality loss & Selected $\theta_\uparrow/\theta_\downarrow$ &
 \begin{itemize}[leftmargin=1.2em]
 \item \textbf{Stylised cost model.} \warm{} is $10\times$ cheaper per byte and $1.5\times$ slower than \hot{}; the reconfiguration multiplier is swept but these ratios are not. Results are ratios between policies under shared assumptions, not device energies. There is no hardware measurement.
 \item \textbf{Models and data.} Two sizes of one model family, 42 images, 64 decode steps, one prompt per image. Larger models (we planned SmolVLM-2.2B and dropped it), other families and long-form generation are untested. Attention is head-averaged per layer; per-head entries are not modelled.
-\item \textbf{Two tiers, unlimited capacity.} No capacity pressure on \hot{}, no bandwidth contention, serialised latency.
+\item \textbf{Two tiers, simple resources.} No capacity pressure on \hot{}. Contention exists only in E8--E9 (E1--E7 serialise latency) and is a small model: fixed counts of bus channels, host lanes and CIM units (only CIM is swept), FIFO queues, a per-step barrier, migrations that do not overlap reads, and a greedy scheduler with a work-conserving finish-time estimate. Bank conflicts, row-buffer behaviour, refresh and a real CIM array's constraints are not modelled.
+\item \textbf{Access regimes are overlays.} The streaming and random regimes re-read the same real attention rows under a different read pattern; they are not separate real workloads. One query per image, decode only, no batching, no prefill cost.
 \item \textbf{Scope of the two added checks.} E6 charges nothing for computing the importance signal. E7 covers one model, one INT4 scheme (the one measured in Sec.~3.2) and measures distributional change (KL over 64 teacher-forced steps), not benchmark accuracy; INT4 effects on this small model are small in absolute terms.
-\item \textbf{Post-hoc choices} (logged above): the damping rule in E1, the threshold normalisation in E2, the grid widening in E5.
+\item \textbf{Post-hoc choices} (logged above): the damping rule in E1, the threshold normalisation in E2, the grid widening in E5, the minimum-age variant in E9. The migration cost in E8--E9 is derived bottom-up from the same stylised tier table, so it is internally consistent but not a hardware measurement.
 \end{itemize}
 
 \section{Conclusion}
-We asked whether importance-aware tiering of multimodal KV caches pays off, and answered with a chain of experiments in which every step either confirmed or overturned the last. The answer is conditional: yes for dense reads, per-entry importance and moderate reconfiguration cost, by $\sim$22--23\% energy at neutral quality, robustly across 42 images and two model sizes; no for sparse reads or very costly moves. The study also leaves a usable method: fix the selection rule and pass criterion before looking, report held-out numbers with intervals, and keep the experiments that failed.
+We asked where the computation on a multimodal KV cache should run, and answered with a chain of nine experiments in which every step confirmed or overturned the last. Dynamic, importance-driven placement of data between a conventional tier and a compute-in-memory tier pays off by $\sim$22--27\% energy at neutral quality when data are reused, for as long as migration costs less than about $45$--$50\times$ a conventional access, and it survives imperfect importance estimates and real INT4 error in the model. Under explicit shared resources the decision of \emph{where each read is computed} is as important as where data live: a wrong default is up to $5\times$ slower than no tiering, and a scheduler that watches queues and spills to the host is better than either fixed choice. Streamed data need no dynamic placement, and sparsely or randomly read data make dynamic placement a liability unless migrations are priced against observed reuse, which our reuse gate does only in part. The study also leaves a usable method: fix hypotheses and pass criteria before looking, report held-out numbers with intervals, say plainly which pre-specified criteria failed, and keep the experiments that did not work.
 
-\paragraph{Reproducibility.} All code, traces, per-simulation CSVs and this paper's figure scripts are in the repository. \texttt{experiments/run\_m7.py}, \texttt{analyze\_m7.py}, \texttt{run\_m7\_estimators.py}, \texttt{validate\_real\_output.py} and \texttt{paper/make\_figures.py} regenerate Sections 5.5--5.7; the lab notebook \texttt{NOTES.md} records every deviation chronologically.
+\paragraph{Reproducibility.} All code, traces, per-simulation CSVs and this paper's figure scripts are in the repository. \texttt{experiments/run\_m7.py}, \texttt{analyze\_m7.py}, \texttt{run\_m7\_estimators.py}, \texttt{validate\_real\_output.py} and \texttt{paper/make\_figures.py} regenerate Sections 5.5--5.7, and \texttt{src/kvtier/system.py}, \texttt{experiments/run\_m9.py} and \texttt{analyze\_m9.py} (E8--E9; 3,402 simulations, about 25 minutes on 7 cores); the lab notebook \texttt{NOTES.md} records every deviation chronologically.
 
 \begin{thebibliography}{99}\small
 \bibitem{vlcache} Tu, D., et al.: VL-Cache: Sparsity and modality-aware KV cache compression for vision-language model inference acceleration. arXiv (2024).
@@ -279,6 +339,10 @@ We asked whether importance-aware tiering of multimodal KV caches pays off, and 
 \bibitem{kivi} Liu, Z., et al.: KIVI: A tuning-free asymmetric 2bit quantization for KV cache. ICML (2024).
 \bibitem{quest} Tang, J., et al.: Quest: Query-aware sparsity for efficient long-context LLM inference. ICML (2024).
 \bibitem{vllm} Kwon, W., et al.: Efficient memory management for large language model serving with PagedAttention. SOSP (2023).
+\bibitem{mutlu19} Mutlu, O., Ghose, S., G\'omez-Luna, J., Ausavarungnirun, R.: Processing data where it makes sense: Enabling in-memory computation. Microprocessors and Microsystems 67 (2019).
+\bibitem{hbmpim} Lee, S., et al.: Hardware architecture and software stack for PIM based on commercial DRAM technology. ISCA (2021).
+\bibitem{attacc} Park, J., et al.: AttAcc! Unleashing the power of PIM for batched transformer-based generative model inference. ASPLOS (2024).
+\bibitem{neupims} Heo, G., et al.: NeuPIMs: NPU-PIM heterogeneous acceleration for batched LLM inferencing. ASPLOS (2024).
 \bibitem{smolvlm} Marafioti, A., et al.: SmolVLM: Redefining small and efficient multimodal models. arXiv (2025).
 \bibitem{coco} Lin, T.-Y., et al.: Microsoft COCO: Common objects in context. ECCV (2014).
 \end{thebibliography}

@@ -35,3 +35,10 @@ class TokenKV:
     raw_importance: float = 0.0    # uncorrected live EMA (see monitor.py bias_correct)
     layer: int = 0                 # transformer layer index for per-layer traces (Milestone 6)
     token: int = 0                 # token index (per-layer traces); entries of one token share it
+    reads: int = 0                 # decode steps in which this entry was read (system simulator, M9)
+    age: int = 0                   # decode steps since creation (system simulator, M9)
+
+    @property
+    def reuse_rate(self) -> float:
+        """Empirical fraction of steps this entry was read: 1 = every step, ~0 = (almost) never reused."""
+        return self.reads / self.age if self.age else 1.0

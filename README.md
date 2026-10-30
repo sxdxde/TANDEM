@@ -125,6 +125,18 @@ staleness and sampling, but not to one score per token) and against the real mod
 applied (dynamic placement changes the next-token distribution 21.8% less than static, 9.4x less than random
 placement of the same size). The write-up is in `paper/` (`main.tex`, `main.pdf`).
 
+**Milestone 9** (computation placement under explicit resources, and access regimes) answers the task statement's own framing -- "decide where
+computation should take place from the location, movement, reuse and characteristics of data", with memory, compute, data movement,
+placement and runtime decisions interacting in the simulation. `src/kvtier/system.py` adds finite bus channels, host lanes and CIM units, work
+packets, migration traffic over the same bus, a runtime compute scheduler (`tier` / `host` / `adaptive` spill) and three access regimes
+(reusable, streaming, random); it reduces exactly to the original simulator in a degenerate configuration (`tests/test_system.py`).
+Findings (see NOTES.md for the full scorecard, including two pre-specified criteria that were missed): tiering moves 11.8x fewer bus bytes than
+flat at 0.64x its makespan (M2's +34% serial latency was an artefact); computing every WARM read in memory is up to 5x slower than flat when CIM
+units are scarce, and an adaptive spill scheduler beats both fixed choices on makespan; the dynamic policy saves 27% energy for reusable data,
+is inert for streamed data, and under random access loses up to +82% energy at 10x migration cost unless gated by observed reuse (the gate
+leaves +1 to +2%). The bottom-up migration cost is ~1.05 HOT accesses (vs the assumed 10x); the break-even is ~45x. The paper is
+`paper/main.pdf` (18 pages).
+
 ## Repository structure
 
 ```
@@ -142,6 +154,8 @@ kvtier-memcentric/
     metrics.py              # energy/latency/quality/footprint aggregation
     real_trace.py           # (M5/M6) real attention -> TraceSession, layer-averaged or per-layer
     profile.py              # (M6b) group importance profiles for layer/role-aware static policies
+    estimators.py           # (M8) imperfect importance signals
+    system.py               # (M9) system model: CIM units, host lanes, bus, compute scheduler, access regimes
   experiments/
     validate_trace.py, run_flat_baseline.py, run_static_modality.py, run_dynamic_hybrid.py  # M1-M3
     run_sensitivity.py, run_damping_sweep.py, make_plots.py                                 # M4/M4b
@@ -150,7 +164,8 @@ kvtier-memcentric/
     run_layer_aware.py                                                                      # M6b
     make_dataset.py, extract_many.py, run_m7.py, analyze_m7.py, run_m7_mechanism.py         # M7
     run_m7_estimators.py, analyze_m8.py, validate_real_output.py, run_m7_part2.sh            # M8
-  tests/                    # pytest (61+)
+    run_m9.py, analyze_m9.py                                                                # M9
+  tests/                    # pytest (77)
   data/                     # M7 image set (manifest.csv; COCO photos are third-party, re-downloadable)
   traces/                   # real attention traces (*.npz; M7 under traces/<model-tag>/)
   results/                  # CSVs and plots

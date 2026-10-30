@@ -1,25 +1,31 @@
 \begin{tikzpicture}[font=\small, >=Stealth,
   box/.style={draw, rounded corners=2pt, minimum height=10mm, align=center, fill=white, line width=0.6pt},
+  dec/.style={box, fill=okc!10, draw=okc!70!black},
   hotb/.style={box, fill=hotc!12, draw=hotc!80!black, minimum height=14mm},
   warmb/.style={box, fill=warmc!12, draw=warmc!80!black, minimum height=14mm},
+  hostb/.style={box, fill=black!6, draw=black!60, minimum height=14mm},
   lab/.style={font=\scriptsize, text=black!70, align=center, fill=white, inner sep=1pt}]
-\node[box, minimum width=36mm] (trace) at (0,0) {Decode trace\\[-1pt]{\scriptsize real VLM attention:}\\[-2pt]{\scriptsize one row per (layer, step)}};
-\node[box, minimum width=36mm] (mon) at (5.6,0) {Importance monitor\\[-1pt]{\scriptsize EMA of attention, live,}\\[-2pt]{\scriptsize past steps only}};
-\node[box, minimum width=40mm] (pol) at (11.4,0) {Placement policy\\[-1pt]{\scriptsize promote $\theta_\uparrow$ / demote $\theta_\downarrow$,}\\[-2pt]{\scriptsize hysteresis, warm-up}};
-\node[box, minimum width=44mm] (rec) at (5.6,-2.7) {Reconfiguration manager\\[-1pt]{\scriptsize each move costs $m\times$ one \hot{} access}};
-\node[hotb, minimum width=42mm] (hot) at (1.2,-5.6) {\textbf{\hot{} tier}\\[-1pt]{\scriptsize FP16, DRAM/HBM, lossless}\\[-2pt]{\scriptsize higher energy per byte}};
-\node[warmb, minimum width=46mm] (warm) at (9.6,-5.6) {\textbf{\warm{} tier}\\[-1pt]{\scriptsize INT4, compute-in-memory, lossy}\\[-2pt]{\scriptsize $\approx\!10\times$ less energy per byte}};
-\begin{scope}[on background layer]
-\node[draw, dashed, rounded corners=4pt, fill=black!2, inner sep=4mm, fit=(hot)(warm)] (mem) {};
-\end{scope}
-\node[font=\scriptsize\bfseries, text=black!60] at ([yshift=2.5mm]mem.south) {tiered KV memory};
-\node[box, minimum width=84mm, fill=black!5] (met) at (5.4,-8.9) {Metrics: energy $\cdot$ latency $\cdot$ tier moves $\cdot$ quality loss $=\epsilon\times$ attention mass read from \warm{}};
+% runtime: observe, then two decisions
+\node[box, minimum width=34mm] (trace) at (0,0) {Decode trace\\[-1pt]{\scriptsize real VLM attention,}\\[-2pt]{\scriptsize one row per (layer, step)}};
+\node[box, minimum width=40mm] (mon) at (6.2,0) {Monitor\\[-1pt]{\scriptsize importance EMA, read count}\\[-2pt]{\scriptsize (past steps only)}};
+\node[dec, minimum width=44mm] (pol) at (12.2,0) {\textbf{Decision 1: data placement}\\[-1pt]{\scriptsize promote / demote, hysteresis,}\\[-2pt]{\scriptsize reuse gate}};
+\node[dec, minimum width=42mm] (sched) at (6.2,-2.6) {\textbf{Decision 2: compute placement}\\[-1pt]{\scriptsize each read runs in memory (CIM)}\\[-2pt]{\scriptsize or on the host; spills when CIM is full}};
+\node[box, minimum width=44mm] (rec) at (12.2,-2.6) {Reconfiguration manager\\[-1pt]{\scriptsize move = read source, requantise,}\\[-2pt]{\scriptsize write destination (bus + host lane)}};
+% resources
+\node[warmb, minimum width=44mm] (warm) at (1.4,-5.4) {\textbf{\warm{} tier + CIM units}\\[-1pt]{\scriptsize INT4 arrays, compute in place}\\[-2pt]{\scriptsize returns only a partial sum}};
+\node[hostb, minimum width=30mm] (host) at (6.2,-5.4) {\textbf{Host compute lanes}\\[-1pt]{\scriptsize conventional attention}\\[-2pt]{\scriptsize pulls bytes over the bus}};
+\node[hotb, minimum width=32mm] (hot) at (11.4,-5.4) {\textbf{\hot{} tier}\\[-1pt]{\scriptsize FP16 DRAM/HBM}\\[-2pt]{\scriptsize lossless}};
+\node[box, minimum width=156mm, minimum height=7mm, fill=black!8] (bus) at (6.8,-7.2) {\textbf{Shared memory bus} (finite channels): attention bytes $\cdot$ spilled INT4 bytes $\cdot$ partial sums $\cdot$ tier-move traffic};
+\node[box, minimum width=120mm, fill=black!3] (met) at (6.8,-8.8) {Metrics: energy $\cdot$ makespan $\cdot$ bytes moved $\cdot$ unit utilisation $\cdot$ tier moves $\cdot$ quality loss $=\epsilon\times$ mass read from \warm{}};
 \draw[->] (trace) -- (mon) node[midway, above, lab]{$w_{e,t}$};
-\draw[->] (mon) -- (pol) node[midway, above, lab]{importance};
-\draw[->] (pol.south) |- (rec.east) node[pos=0.25, right, lab]{move requests};
-\draw[->, hotc!80!black, line width=0.8pt] (rec.south) ++(0,-0mm) -- ++(0,-3mm) -| ([xshift=6mm]hot.north) node[pos=0.3, above, lab, xshift=-14mm]{promote / demote};
-\draw[->, warmc!80!black, line width=0.8pt] (rec.south) ++(0,-3mm) -| ([xshift=-6mm]warm.north);
-\draw[->] (trace.south) -- ([xshift=-14mm]hot.north |- mem.north) node[midway, left, lab]{reads, charged\\to the entry's tier};
-\draw[<->, dashed] (hot.east) -- (warm.west) node[midway, above, lab]{requantize};
-\draw[->] (mem.south) -- (met.north);
+\draw[->] (mon) -- (pol) node[midway, above, lab]{signals};
+\draw[->] ([xshift=-9mm]pol.south) -- ++(0,-7mm) -| (sched.north) node[pos=0.22, above, lab]{tier of every entry read};
+\draw[->] ([xshift=9mm]pol.south) -- ([xshift=9mm]rec.north) node[midway, right, lab]{moves};
+\draw[->, line width=0.8pt, okc!70!black] (sched.south) -- (host.north) node[midway, right, lab]{on host};
+\draw[->, line width=0.8pt, okc!70!black] ([xshift=-12mm]sched.south) -- ++(0,-5mm) -| (warm.north) node[pos=0.25, above, lab]{in memory};
+\draw[->] ([xshift=17mm]rec.south) -- ([xshift=17mm]rec.south |- bus.north) node[pos=0.5, right, lab]{move traffic};
+\draw[<->, line width=0.8pt] (warm.south) -- (warm.south |- bus.north);
+\draw[<->, line width=0.8pt] (host.south) -- (host.south |- bus.north);
+\draw[<->, line width=0.8pt] (hot.south) -- (hot.south |- bus.north);
+\draw[->] (bus.south) -- (met.north);
 \end{tikzpicture}

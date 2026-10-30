@@ -136,3 +136,33 @@ class DynamicHybridPolicy:
         if entry.tier == Tier.HOT and entry.importance < self.demote_threshold:
             return entry.tier if damped else Tier.WARM
         return entry.tier
+
+
+class ReuseAwareDynamicPolicy(DynamicHybridPolicy):
+    """Dynamic hybrid placement that only pays for a tier move when the entry will be reused enough
+    to repay it (Milestone 9).
+
+    A move costs ``R`` and each later read saves (or, for a promotion, protects quality worth) about
+    ``G``; the move therefore only pays if the entry is read at least ``R / G`` more times. The runtime
+    can observe how often an entry has been read (``entry.reuse_rate``) but not the future, so it
+    extrapolates: expected future reads = ``reuse_rate * horizon_steps``. Moves are suppressed while that
+    is below ``min_expected_accesses`` (the break-even read count, derived from the cost model by
+    ``system.breakeven_accesses``). With dense reads ``reuse_rate`` is 1 and the policy is exactly
+    ``DynamicHybridPolicy``; for streamed (read-once) or randomly sampled data it stops paying for moves
+    that cannot be recovered.
+    """
+
+    name = "dynamic_reuse"
+
+    def __init__(self, promote_threshold: float, demote_threshold: float, warmup_steps: int = 0,
+                 min_dwell_steps: int = 0, damp_promotions: bool = True,
+                 min_expected_accesses: float = 1.0, horizon_steps: float = 32.0, min_age: int = 0):
+        super().__init__(promote_threshold, demote_threshold, warmup_steps, min_dwell_steps, damp_promotions)
+        self.min_expected_accesses = min_expected_accesses
+        self.horizon_steps = horizon_steps
+        self.min_age = min_age  # the read-frequency estimate is not trusted before the entry is this old
+
+    def update(self, entry: TokenKV) -> Tier:
+        if entry.age < self.min_age or entry.reuse_rate * self.horizon_steps < self.min_expected_accesses:
+            return entry.tier
+        return super().update(entry)

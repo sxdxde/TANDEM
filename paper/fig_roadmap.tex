@@ -25,6 +25,12 @@
 \node[tag] (t7) at (0,6*\dy) {E7};
 \node[q, right=1mm of t7, anchor=west] (q7) {Objection 2: is the quality proxy real? Apply INT4 in the actual model.};
 \node[f, right=3mm of q7, fill=okc!12, draw=okc!70!black] (f7) {Real INT4: output KL $21.8\%$ below static, $9.4\times$ below random placement; proxy $\rho{=}0.81$.};
-\foreach \a/\b/\txt in {1/2/{synthetic result relies on an assumed attention profile},2/3/{real attention was averaged over layers, hiding structure},3/4/{what explains the win? first guess: a layer effect},4/5/{3 images, 1 model, 1 held-out trace},5/6/{oracle importance},6/7/{proxy, not measurement}}{
+\node[tag] (t8) at (0,7*\dy) {E8};
+\node[q, right=1mm of t8, anchor=west] (q8) {Objection 3: tier implied the compute site, latency was serial. Add finite CIM units, host lanes, a bus, a scheduler.};
+\node[f, right=3mm of q8, fill=okc!12, draw=okc!70!black] (f8) {Tiering is $0.64\times$ flat's makespan, not $+34\%$; in-memory only is $5\times$ slower at 2 CIM units; adaptive spill beats both; dynamic keeps $-27\%$ energy.};
+\node[tag] (t9) at (0,8*\dy) {E9};
+\node[q, right=1mm of t9, anchor=west] (q9) {Does placement need to differ for reusable, streamed and random data?};
+\node[f, right=3mm of q9, fill=hotc!14, draw=hotc!80!black] (f9) {Yes. Reusable $-27\%$; streamed: inert; random: up to $+82\%$ unless migrations are priced against reuse; the gate leaves $+1$--$2\%$ (criterion missed).};
+\foreach \a/\b/\txt in {1/2/{synthetic result relies on an assumed attention profile},2/3/{real attention was averaged over layers, hiding structure},3/4/{what explains the win? first guess: a layer effect},4/5/{3 images, 1 model, 1 held-out trace},5/6/{oracle importance},6/7/{proxy, not measurement},7/8/{task asks where \emph{computation} runs, under contention},8/9/{every read had the same reuse}}{
   \draw[->, line width=0.7pt] ($(q\a.south west)+(8mm,0)$) -- node[right=1pt, font=\scriptsize\itshape, text=black!65, inner sep=0.5pt] {\txt} ($(q\b.north west)+(8mm,0)$);}
 \end{tikzpicture}

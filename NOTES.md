@@ -402,6 +402,50 @@ trips (g32), KL(full || policy) of the next-token distribution:
   absolute terms (all-INT4 keeps 93% agreement); one model, one INT4 scheme, KL not benchmark accuracy.
 Paper: `paper/main.tex` (build: `cd paper && pdflatex main.tex` twice; figures: `.venv/bin/python paper/make_figures.py`).
 
+## M9: computation placement under explicit resources, and access regimes (E8, E9) -- protocol written BEFORE looking at results
+
+Motivation: the task statement asks for an architecture that decides *where computation runs* from the location, movement, reuse and
+characteristics of data, with memory, compute, data movement, placement and runtime decisions interacting explicitly in the simulation,
+and for the feasibility and overhead of dynamic placement. M1-M8 modelled data placement only (tier implies compute site, latencies
+serialised, reuse uniform). M9 adds `src/kvtier/system.py` (new; `simulator.py` is untouched so M1-M8 stay reproducible):
+finite bus channels, host lanes and CIM units, work packets, a per-step barrier, migration traffic over the same bus, a runtime
+compute scheduler (`tier` / `host` / `adaptive` spill), access regimes (dense / stream / random), and a reuse-aware policy
+(`ReuseAwareDynamicPolicy`: suppress a move unless reuse_rate x 32 steps >= the break-even read count derived from the cost model).
+`SystemConfig.legacy()` reproduces `run_session` exactly (tests/test_system.py), which is the regression anchor.
+Bottom-up migration cost (read src + requantise + write dst + 14 ns / 60 pJ of table update) is ~1.05 HOT accesses, vs the assumed 10x of M1-M8.
+Thresholds are NOT re-tuned in M9: the 256M leave-one-out choice 8x/0.4x is used throughout (stated limitation).
+Smoke test before writing this section: one trace, random 10% regime, dynr at scale 1 (to check the code runs). No other result had been seen.
+
+Pre-specified hypotheses and pass criteria (42 traces, SmolVLM-256M, paired per trace, bootstrap 95% CI):
+- **H8a** (contention reverses the serial-latency penalty): static modality vs flat moves >= 5x fewer bus bytes and uses >= 5x less energy, and its makespan is *lower* than flat's (flat is bus-bound; M2's +34% serial latency was an artefact of serialisation).
+- **H8b** (scheduler matters when CIM is scarce): at cim_units <= 4, `tier` makes static modality *slower than flat* (makespan ratio > 1); `adaptive` brings the makespan to within 10% of the better of {tier, host} at every CIM capacity while using less energy than `host`.
+- **H8c** (dynamic survives contention and bottom-up migration cost): dynamic vs static >= 10% lower energy, quality loss within +2%, at default resources and scale 1.
+- **H9a** (reusable/dense): dynamic beats static by >= 10% energy at neutral quality (replicates E5 in the new model).
+- **H9b** (streaming): reads are one-pass, so no move can be repaid; dynamic ~ static (|energy diff| < 2%).
+- **H9c** (random access): at the 10x-stressed migration cost, ungated dynamic is worse than static; the reuse gate fixes it: gated energy <= min(static, ungated) + 1%.
+- **H9d** (no single policy): the best of {flat, static, dynamic, dynamic+gate} by energy at neutral quality differs across regimes, and dynamic+gate is never worse than static by > 2% energy in any regime.
+- **H9e** (cost sensitivity, 14 traces): break-even migration scale in the explicit model; reported, no threshold pre-set.
+Anything failing its criterion is reported as failing.
+
+### M9 results (3,402 simulations: `results/m9_system.csv`, summaries `m9_e8_summary.csv`, `m9_e9_summary.csv`, `m9_e9b_summary.csv`; `experiments/analyze_m9.py`)
+
+Scorecard against the criteria above (all 42 traces, SmolVLM-256M, 16 CIM units / 8 host lanes / 8 bus channels unless swept):
+- **H8a confirmed.** Static vs flat: 11.8x fewer bus bytes, 9.3x less energy, makespan 0.64x flat (flat is 99% bus-utilised, static 98% CIM-utilised). The +34% serial latency of M2 was an artefact of serialisation.
+- **H8b confirmed.** `tier` makespan vs flat at 2/4/8/16/32/64 CIM units: 4.98/2.50/1.25/0.64/0.33/0.18x; `host` 0.92x at every capacity but energy 0.319 (vs 0.108 for `tier`) and bytes 0.313 (vs 0.085); `adaptive` 0.88/0.76/0.60/0.42/0.27/0.15x (better than both at every capacity), energy 0.28 -> 0.12 of flat, spills 83% -> 6% of WARM packets. At 16 units adaptive costs 1.66x the energy of `tier` for a 33% lower makespan.
+- **H8c confirmed (with a latency cost).** Dynamic vs static, `tier`, 16 units, bottom-up migration cost: energy -27.4% [-27.8, -27.0], bus bytes -35.6%, quality -2.5%, makespan +4.7% [4.6, 4.9]. Under `adaptive` the energy advantage shrinks to -12.5% (16 units) / -8.0% (2 units). The reason for the +4.7% makespan was NOT isolated (my explanation -- more host-side entries plus migration traffic on the bus -- is untested).
+- **H9a confirmed.** Dense: dynamic -27.4% energy (bottom-up) / -21.6% (10x), quality -2.5% [-4.0, -1.1], 1190 moves.
+- **H9b confirmed, trivially.** Streaming: zero moves for dynamic and reuse-aware (the warm-up of 2 observations is never reached by read-once entries), so identical to static. Not evidence of policy cleverness.
+- **H9c NOT met.** Random access at 10x migration cost: ungated dynamic is +32.1% (10% reads) / +81.9% (3%) energy vs static; the reuse gate cuts moves 1064->91 and 645->9 and the loss to +2.15% / +1.11%, outside the +1% criterion. At the bottom-up cost the gate never engages (break-even 1.08 reads) and dynamic saves energy (-15.8% at 10% reads, -25.1% at 30%) but loses quality (+5.7%, +3.9%; +2.6% at 3% where it also loses energy +2.1%). Dynamic placement is therefore not regret-free under random access even when migration is cheap; the cause (thresholds fitted to dense reads? monitor only sees an entry when it is read?) is untested.
+- **H9d half met.** Best policy differs by regime (dynamic: reusable; static: sparse random; tie: stream). "Gated never >2% worse than static" fails narrowly (+2.15% at 10% reads, 10x).
+- **H9e.** Explicit-model migration sweep (dense, 14 traces): -28.1/-27.5/-25.5/-22.3/-15.9/+3.3% at 1/2/5/10/20/50x the bottom-up cost; break-even ~45x (interpolated); migration energy share 1/2/4/8/15/31%; makespan penalty +4.6% -> +47.6%. Agrees with the ~50x break-even of M7 from a different cost model.
+- **Bottom-up migration cost** (read src + requantise/table update 14 ns, 60 pJ + write dst) = 1.05 HOT accesses (energy), vs the 10x assumed in M1-M8. It is derived from the same stylised tier table, so it is internally consistent, not a hardware measurement.
+
+**POST-HOC (e9c; not in the protocol, same 42 test traces, three ages tried):** after H9c failed, a minimum entry age before the read-frequency estimate is trusted. A look at one trace (82 moves, 79 on prefill entries) suggested a noisy early-age frequency estimate; the variant tests that. min_age 16 at 10x: random 3/10/30% = 0.00/+0.13/-0.84% energy, quality neutral (4.5 moves at 10%); but dense falls from -21.6% to -14.6% (min_age 8: -17.5%; min_age 4 changes nothing at 10% reads: +2.15%; min_age 8: +1.06%). Reported as a diagnosis, not a tuned result.
+
+**Bug caught during M9:** the resumable runner's first version, when `m9_system.csv` already existed and the partial file did not, wrote a headerless partial file and would have overwritten the CSV with only the new rows on completion. Caught within a minute of launching the e9c job (killed before it finished; the CSV was intact and backed up), fixed in `run_m9.py` main(): existing + partial are concatenated, the partial always gets a header.
+
+Honest caveats specific to M9: access regimes are overlays on the same real attention rows (not separate real workloads); thresholds 8x/0.4x not re-tuned per regime or per migration cost; the scheduler's finish-time estimate is greedy; no overlap of migrations with reads; resource counts are fixed except CIM units; one model (256M); E8-E9 use dense/overlay reads from the 64-step decode only.
+
 ## Open questions / caveats
 - Synthetic M4 conclusions did not replicate on real traces (see M5); treat the M4
   quality-vs-energy numbers as a property of the synthetic trace, not of VLMs.
@@ -409,7 +453,7 @@ Paper: `paper/main.tex` (build: `cd paper && pdflatex main.tex` twice; figures: 
   traces, a single held-out trace. Natural photos/documents and larger models untested.
 - WARM quant error 0.05 in the config is below the measured ~0.09 (M6); ratios vs static are
   unaffected, absolute quality values are ~1.8x too small.
-- Latency is a serialized total-work figure (see `metrics.py`), not wall-clock.
+- Latency in M1-M8 is a serialized total-work figure (see `metrics.py`), not wall-clock; M9's `system.py` simulates contention (makespan) but is still a small model (see M9 caveats).
 - Next candidates (per-layer, sparse model, INT4 measurement, layer-aware static baseline done):
   per-head entries; natural images / documents and a larger VLM (the main external-validity
   gap); sweep reconfig cost and top-k fraction on real traces (does dynamic survive 20x cost?);

@@ -288,6 +288,106 @@ def fig_real_output():
     save(fig, "fig_real_output")
 
 
+# ---------------------------------------------------------------- M9: system model (E8, E9, E9b)
+SCHED = {"tier": ("Compute in memory (tier)", "#2a9d8f"), "adaptive": ("Adaptive spill", "#d9622b"),
+         "host": ("Host only (WARM = storage)", "#8a8a8a")}
+
+
+def fig_e8():
+    f = R / "m9_e8_summary.csv"
+    if not f.exists():
+        return print("skip fig_e8 (no data)")
+    t = pd.read_csv(f)
+    fig, ax = plt.subplots(2, 2, figsize=(7.1, 4.6))
+    spec = [(ax[0, 0], "latency_vs_flat", "Makespan / flat", False), (ax[0, 1], "energy_vs_flat", "Energy / flat", True),
+            (ax[1, 0], "bus_vs_flat", "Bytes on the bus / flat", True)]
+    for a, col, ttl, logy in spec:
+        for sched, (lab, c) in SCHED.items():
+            for pol, ls in (("static", "-"), ("dyn", "--")):
+                g = t[(t.scheduler == sched) & (t.policy == pol)].sort_values("cim_units")
+                a.plot(g.cim_units, g[col], ls, color=c, marker="o", ms=3, lw=1.3,
+                       label=f"{lab}, {'static' if pol == 'static' else 'dynamic'}" if col == "latency_vs_flat" else None)
+        a.set_xscale("log", base=2); a.set_xticks(sorted(t.cim_units.unique())); a.set_xticklabels(sorted(t.cim_units.unique()))
+        a.minorticks_off()
+        if logy:
+            a.set_yscale("log")
+        a.set_xlabel("CIM units"); a.set_title(ttl, loc="left")
+    ax[0, 0].axhline(1, color=C["ink"], lw=0.8)
+    ax[0, 0].text(2.1, 1.03, "flat (all HOT)", fontsize=6.8)
+    a = ax[1, 1]
+    g = t[(t.scheduler == "adaptive") & (t.policy == "static")].sort_values("cim_units")
+    a.plot(g.cim_units, 100 * g.spill, color=SCHED["adaptive"][1], marker="o", ms=3, lw=1.3, label="WARM packets spilled to host (%)")
+    for sched in ("tier", "adaptive"):
+        g = t[(t.scheduler == sched) & (t.policy == "static")].sort_values("cim_units")
+        a.plot(g.cim_units, 100 * g.util_cim, ":", color=SCHED[sched][1], marker="s", ms=3, lw=1.1,
+               label=f"CIM utilisation, {sched} (%)")
+    a.set_xscale("log", base=2); a.set_xticks(sorted(t.cim_units.unique())); a.set_xticklabels(sorted(t.cim_units.unique()))
+    a.minorticks_off(); a.set_xlabel("CIM units"); a.set_title("Spill and utilisation (static policy)", loc="left")
+    a.legend(frameon=False, fontsize=6.3, loc="center right")
+    ax[0, 0].legend(frameon=False, fontsize=6.0, loc="upper right", ncol=1)
+    for a, l in zip(ax.flat, "abcd"):
+        panel(a, l)
+    fig.tight_layout(h_pad=1.0, w_pad=1.0)
+    save(fig, "fig_e8")
+
+
+REG_ORDER = [("dense", 1.0, "Reusable\n(dense)"), ("random", 0.3, "Random\n30%"), ("random", 0.1, "Random\n10%"),
+             ("random", 0.03, "Random\n3%"), ("stream", 0.0, "Streaming\n(read once)")]
+
+
+def fig_e9():
+    f, fb = R / "m9_e9_summary.csv", R / "m9_e9b_summary.csv"
+    if not f.exists():
+        return print("skip fig_e9 (no data)")
+    t = pd.read_csv(f)
+    fig, ax = plt.subplots(2, 2, figsize=(7.1, 4.7))
+    series = [("dyn", 1.0, "Dynamic, bottom-up migration cost", "#d9622b", "o"),
+              ("dyn", 10.0, "Dynamic, 10x migration cost", "#3b6fb6", "o"),
+              ("dynr", 10.0, "+ reuse gate, 10x", "#3b6fb6", "^"),
+              ("dynr_a16", 10.0, "+ gate + min. age 16 (post hoc), 10x", "#2a9d8f", "D")]
+
+    def get(pol, sc, reg, fr, col):
+        r = t[(t.regime == reg) & (t.frac == fr) & (t.policy == pol) & (t.scale == sc)]
+        if len(r) == 0 and reg == "stream":
+            r = t[(t.regime == reg) & (t.policy == "dyn") & (t.scale == sc)]  # inert: zero moves for every variant
+        return r[col].iloc[0]
+
+    x = np.arange(len(REG_ORDER))
+    for a, col, lo, hi, ttl in ((ax[0, 0], "e", "e_lo", "e_hi", "Energy vs static modality (%)"),
+                                (ax[0, 1], "q", "q_lo", "q_hi", "Quality loss vs static modality (%)")):
+        for k, (pol, sc, lab, c, m) in enumerate(series):
+            ys = np.array([get(pol, sc, reg, fr, col) for reg, fr, _ in REG_ORDER])
+            los = np.array([get(pol, sc, reg, fr, lo) for reg, fr, _ in REG_ORDER])
+            his = np.array([get(pol, sc, reg, fr, hi) for reg, fr, _ in REG_ORDER])
+            off = (k - 1.5) * 0.15
+            a.errorbar(x + off, ys, yerr=[ys - los, his - ys], fmt=m, color=c, ms=4, lw=0.9, capsize=1.5,
+                       mfc=c if pol == "dyn" else "white", label=lab if col == "e" else None)
+        a.axhline(0, color=C["ink"], lw=0.8); a.set_xticks(x); a.set_xticklabels([l for _, _, l in REG_ORDER], fontsize=6.4)
+        a.set_title(ttl, loc="left")
+    ax[0, 0].legend(frameon=False, fontsize=5.8, loc="upper left")
+    ax[0, 0].set_ylim(-34, 95)
+    # moves
+    a = ax[1, 0]
+    for k, (pol, sc, lab, c, m) in enumerate(series):
+        ys = [get(pol, sc, reg, fr, "moves") for reg, fr, _ in REG_ORDER]
+        a.plot(x + (k - 1.5) * 0.15, ys, m, color=c, mfc=c if pol == "dyn" else "white", ms=4, ls="")
+    a.set_yscale("symlog", linthresh=10); a.set_xticks(x); a.set_xticklabels([l for _, _, l in REG_ORDER], fontsize=6.4)
+    a.set_title("Tier moves per session", loc="left")
+    # cost sweep
+    a = ax[1, 1]
+    if fb.exists():
+        b = pd.read_csv(fb)
+        a.plot(b.scale, b.e, "-o", color="#d9622b", ms=3.5, lw=1.3)
+        a.fill_between(b.scale, b.e_lo, b.e_hi, color="#d9622b", alpha=0.2, lw=0)
+        a.axhline(0, color=C["ink"], lw=0.8); a.set_xscale("log")
+        a.set_xticks(b.scale); a.set_xticklabels([f"{v:g}" for v in b.scale]); a.minorticks_off()
+        a.set_xlabel("migration cost / bottom-up estimate"); a.set_title("Energy vs static, dense reads (%)", loc="left")
+    for a, l in zip(ax.flat, "abcd"):
+        panel(a, l)
+    fig.tight_layout(h_pad=1.0, w_pad=1.0)
+    save(fig, "fig_e9")
+
+
 if __name__ == "__main__":
-    for fn in (fig_synth, fig_anatomy, fig_ladder, fig_m6b, fig_cost, fig_mech, fig_estimators, fig_real_output):
+    for fn in (fig_synth, fig_anatomy, fig_ladder, fig_m6b, fig_cost, fig_mech, fig_estimators, fig_real_output, fig_e8, fig_e9):
         fn()
