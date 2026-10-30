@@ -21,13 +21,38 @@
 \newcommand{\warm}{\textsc{warm}}
 \newcommand{\pj}{\,pJ}
 
-\title{\vspace{-0.6cm}\textbf{Where Should Attention Run?\\ Data-Local Computation Placement for Multimodal KV Caches}\\[3pt]{\large\emph{A hypothesis-driven simulation study on real vision-language attention}}}
+\title{\vspace{-0.6cm}{\fontsize{30}{34}\selectfont\textbf{TANDEM}}\\[5pt]\textbf{\large \textbf{T}iered, \textbf{A}daptive, \textbf{N}ear-memory \textbf{D}ata-and-compute placement\\ for \textbf{E}fficient \textbf{M}ultimodal KV caches}\\[5pt]{\normalsize\emph{Where should attention run? A hypothesis-driven simulation study on real vision-language attention}}}
 \author{Sudarshan Sudhakar\\ \small Independent research. Code, traces and all result tables: \texttt{KV-Tier} repository}
 \date{}
 
 \begin{document}
 \maketitle
 \vspace{-0.9cm}
+
+\vspace{4pt}
+\begin{center}
+\fcolorbox{okc!70!black}{okc!6}{\begin{minipage}{0.955\linewidth}\small
+\textbf{Why ``TANDEM''.} The system makes two runtime decisions \emph{in tandem}: where each KV entry \emph{lives} (data placement) and where each read is \emph{computed} (computation placement).\par\smallskip
+\textbf{Contributions.}
+\begin{enumerate}[leftmargin=1.3em,itemsep=0pt,topsep=2pt]
+\item A formulation of KV-cache placement as a \emph{joint data- and computation-placement} problem, and two SimPy simulators of it: an access-cost model (E1--E7) and a system model with finite compute-in-memory (CIM) units, host lanes, a shared bus, work packets, migration traffic and a compute scheduler (E8--E9) that reduces exactly to the first (unit-tested).
+\item A negative result with a diagnosis: the synthetic-trace win does not replicate on real attention, and the win that appears at per-(token, layer) granularity is \emph{not} a layer or role prior (E2--E4).
+\item A pre-specified scale-up (42 images, 3 image kinds, 2 model sizes, leave-one-trace-out, bootstrap CIs) establishing the data-placement saving and its failure region (E5).
+\item Two checks on the strongest objections to a simulation study: non-oracle importance (E6) and measured output change when INT4 is applied in the real model (E7).
+\item Evidence that the compute-site decision is first-order under contention, including a correction of an earlier latency result that was an artefact of serial accounting, and a bottom-up migration cost of $\approx\!1.05$ \hot{} accesses in place of the assumed $10\times$ (E8).
+\item Evidence that placement must depend on data reuse (reusable, streamed, random), with pre-specified hypotheses of which two fail narrowly and are reported as such (E9).
+\end{enumerate}
+\smallskip
+\textbf{Key results at a glance.}
+\begin{itemize}[leftmargin=1.3em,itemsep=0pt,topsep=2pt]
+\item \textbf{$-22.3\%$ / $-23.4\%$ energy} (SmolVLM-256M / 500M) from dynamic data placement vs static modality tiering, at neutral quality, on 42 images; thresholds transfer between sizes; break-even at $\sim\!50\times$ migration cost; \textbf{fails under sparse reads} ($+5.7\%$ at top-10\%).
+\item Robust to a degraded importance signal ($-18.6$ to $-21.8\%$) but \textbf{not} to one score per token ($-7.6\%$). With real INT4 in the model: output KL \textbf{21.8\% lower} than static and \textbf{9.4$\times$ lower} than random placement.
+\item Under contention (E8): tiering moves \textbf{11.8$\times$ fewer bytes} at \textbf{0.64$\times$ the makespan} of a flat memory (the serial model's $+34\%$ latency was an artefact). Always computing in memory is up to \textbf{5$\times$ slower} than flat with 2 CIM units; an \textbf{adaptive spill scheduler beats both} fixed choices.
+\item Under reuse (E9): \textbf{$-27.4\%$} energy for reusable data; inert for streamed data; for random access up to \textbf{$+82\%$ energy} at $10\times$ migration cost unless migrations are priced against observed reuse. The reuse gate leaves $+1$ to $+2\%$ and \textbf{misses our pre-specified criterion}.
+\end{itemize}
+\end{minipage}}
+\end{center}
+\vspace{2pt}
 
 \begin{abstract}
 A memory-centric architecture should decide where computation runs from the location, movement, reuse and error tolerance of the data, and the run-time cost of making that decision must be shown to be worth paying. We study this on the key--value (KV) cache of vision-language models (VLMs), whose decode-time reads dominate memory traffic. The memory has a \hot{} tier (FP16 DRAM/HBM, host compute) and a \warm{} tier (INT4 compute-in-memory). A runtime makes two decisions from live importance and reuse estimates: \emph{data placement} (which tier an entry occupies, changed by a paid migration) and \emph{computation placement} (whether a \warm{} read runs in memory or on the host). The study is a chain of nine experiments on real SmolVLM attention (42 images, two model sizes) in which each result motivates the next and failures are kept: a synthetic-trace win did not replicate on real attention, and a layer-prior explanation was falsified. With dense reads and a $10\times$ migration cost, dynamic data placement lowers energy by \textbf{22.3\%} (256M) and \textbf{23.4\%} (500M) against static modality tiering at neutral quality, breaks even near $50\times$ migration cost, and vanishes under sparse reads. It survives noisy, stale or sampled importance, and with INT4 applied inside the model it changes the next-token distribution 21.8\% less than static tiering and $9.4\times$ less than random placement. A system-level model with finite CIM units, host lanes and a shared bus then shows that tiering moves $11.8\times$ fewer bytes than a flat memory at $0.64\times$ its makespan (the serialised model's $+34\%$ latency was an artefact); that always computing in memory is up to $5\times$ slower than a flat memory when CIM units are scarce; and that an adaptive scheduler that spills to the host beats both fixed choices on makespan. Finally, the right placement depends on reuse: dynamic placement saves 27\% energy for reusable data (bottom-up migration cost), is inert for streamed data, and under random access loses up to $+82\%$ energy unless migrations are priced against observed reuse. A reuse gate removes most but not all of that loss ($+1$ to $+2\%$), narrowly missing our pre-specified parity criterion.
@@ -64,15 +89,7 @@ Reusable, streamed and randomly accessed reads, on real attention (E9); sparse t
 
 \paragraph{Approach.} We build SimPy simulators with explicit models of access cost, quantization error, tier moves and (for E8--E9) compute resources and data movement, and we feed them \emph{real} decode-time attention extracted from SmolVLM. We treat the work as a sequence of falsifiable hypotheses. Each experiment is motivated by the weakness of the previous one (Fig.~\ref{fig:roadmap}). Selection rules and success criteria were written in the lab notes before the corresponding runs (a self-imposed discipline, not an external registration), and every deviation from them is logged.
 
-\paragraph{Contributions.}
-\begin{enumerate}[leftmargin=1.3em]
-\item A formulation of KV-cache placement as a \emph{joint data- and computation-placement} problem, and two SimPy simulators of it: an access-cost model (E1--E7) and a system model with finite CIM units, host lanes, a shared bus, work packets, migration traffic and a compute scheduler (E8--E9), which reduces exactly to the first (unit test).
-\item A negative result with a diagnosis: the synthetic-trace win does not replicate on real attention, because real visual tokens receive only $\sim$6\% of attention mass; the win appears at per-(token, layer) granularity and is \emph{not} explained by a layer or role prior (a static profile is $16$--$26\%$ worse in quality at matched energy).
-\item A pre-specified scale-up (42 images, three image kinds, two model sizes, leave-one-trace-out selection, bootstrap CIs): \textbf{$-22$ to $-23\%$ energy at neutral quality} for dense reads, break-even near $50\times$ migration cost, and a clear failure region (sparse reads).
-\item Two checks aimed at the strongest objections to a simulation study: robustness to a \emph{non-oracle} importance signal (E6) and agreement of the quality proxy with \emph{measured} output change when INT4 is applied in the real model (E7).
-\item Evidence that the compute-site decision is first-order under contention (E8), including a correction of an earlier result that was an artefact of serial latency, and a bottom-up migration cost ($\approx\!1.05$ \hot{} accesses) in place of the assumed $10\times$.
-\item Evidence that placement should depend on data reuse (E9): reusable, streamed and randomly accessed data, with pre-specified hypotheses of which two fail narrowly and are reported as such.
-\end{enumerate}
+\paragraph{Contributions and name.} The contributions and the key results are summarised in the box on the first page. We call the study TANDEM because its two runtime decisions, data placement and computation placement, are made in tandem and interact through shared resources.
 
 \begin{figure}[t]
 \centering
@@ -346,5 +363,56 @@ We asked where the computation on a multimodal KV cache should run, and answered
 \bibitem{smolvlm} Marafioti, A., et al.: SmolVLM: Redefining small and efficient multimodal models. arXiv (2025).
 \bibitem{coco} Lin, T.-Y., et al.: Microsoft COCO: Common objects in context. ECCV (2014).
 \end{thebibliography}
+
+
+\appendix
+\section{Glossary}
+\begin{description}[leftmargin=2.2cm,labelwidth=2cm,itemsep=1pt]
+\item[KV cache] Per-layer keys and values of every token already processed, re-read at every decoding step.
+\item[Entry] The KV pair of one (token, layer); the unit that is placed.
+\item[\hot{} / \warm{}] Conventional FP16 DRAM/HBM tier with host compute / INT4 compute-in-memory tier (cheaper per byte, slower, lossy).
+\item[CIM] Compute-in-memory: arithmetic done inside the memory array, so that only a partial result crosses the bus.
+\item[Static modality] Baseline: visual entries in \warm{}, text entries in \hot{}, never moved.
+\item[Dynamic policy] Promotes/demotes entries on a live importance EMA with hysteresis, paying for every move.
+\item[Migration] A tier move: read source tier, requantise, write destination tier.
+\item[Spill] A \warm{} read computed on the host instead of in memory.
+\item[Makespan] Simulated time of the whole session with resource contention (E8--E9); E1--E7 report serial latency.
+\item[Reuse rate] Fraction of steps in which an entry was read; the gate in E9 extrapolates it to decide whether a migration will be repaid.
+\item[KL] $\mathrm{KL}(p_{\text{full}}\,\|\,p_{\text{policy}})$ of the next-token distribution, used in E7.
+\end{description}
+
+\section{Pre-specified hypotheses of E8--E9}
+Written in the lab notes (\texttt{NOTES.md}, section M9) after the runs were launched and before any result was inspected, apart from one smoke-test trace. Thresholds are the E5 choice ($8\times/0.4\times$) throughout.
+\begin{description}[leftmargin=1.1cm,labelwidth=0.9cm,itemsep=1pt]
+\item[H8a] Static modality vs flat moves $\ge5\times$ fewer bus bytes and uses $\ge5\times$ less energy, and its makespan is \emph{lower} than flat's.
+\item[H8b] At $\le4$ CIM units, always computing in memory makes static modality \emph{slower than flat}; the adaptive scheduler is within 10\% of the better of \{tier, host\} at every capacity and uses less energy than host-only.
+\item[H8c] Dynamic vs static: $\ge10\%$ lower energy, quality loss within $+2\%$, at default resources and the bottom-up migration cost.
+\item[H9a] Reusable (dense): dynamic beats static by $\ge10\%$ energy at neutral quality.
+\item[H9b] Streaming: no move can be repaid; dynamic $\approx$ static (energy difference $<2\%$).
+\item[H9c] Random access at $10\times$ cost: ungated dynamic is worse than static; the gated policy is within $+1\%$ of $\min$(static, ungated).
+\item[H9d] The best of \{flat, static, dynamic, dynamic+gate\} differs across regimes, and dynamic+gate is never more than $2\%$ worse than static in energy.
+\item[H9e] Break-even migration scale in the explicit model (reported; no threshold pre-set).
+\end{description}
+Outcomes are in Tab.~\ref{tab:score}: H9c and the second half of H9d were \emph{not} met.
+
+\section{Full result tables}
+\input{app_e8.tex}
+\input{app_e9.tex}
+
+\section{Reproducing the results}
+\begin{verbatim}
+python -m venv .venv && .venv/bin/pip install -e ".[dev,vlm]"
+.venv/bin/python -m pytest -q                       # 77 tests, incl. legacy-equivalence of system.py
+.venv/bin/python experiments/make_dataset.py        # 42-image set (COCO photos re-downloaded)
+.venv/bin/python experiments/extract_many.py        # real attention traces (MPS/GPU)
+.venv/bin/python experiments/run_m7.py s256         # E5 grid, 256M      (analyze_m7.py for tables)
+.venv/bin/python experiments/run_m7_estimators.py   # E6
+.venv/bin/python experiments/validate_real_output.py 42 mps   # E7
+.venv/bin/python experiments/run_m9.py e8 e9 e9b e9c          # E8-E9 (3,402 simulations)
+.venv/bin/python experiments/analyze_m9.py          # summaries in results/m9_*_summary.csv
+.venv/bin/python paper/make_figures.py && .venv/bin/python paper/make_tables.py
+cd paper && pdflatex main.tex && pdflatex main.tex
+\end{verbatim}
+The simulations of E8--E9 take about 25 minutes on 7 cores; the lab notebook \texttt{NOTES.md} records every deviation and every pre-specified criterion in chronological order.
 
 \end{document}

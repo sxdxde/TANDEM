@@ -1,0 +1,28 @@
+\begin{table}[h]
+\centering\scriptsize\setlength{\tabcolsep}{3.2pt}
+\caption{E8 in full: per-trace ratios to flat, averaged over 42 traces, by CIM capacity. T = compute in memory (tier), H = host only, A = adaptive spill. Last column: share of \warm{} packets the adaptive scheduler spilled. Flat: mean makespan 5104 $\mu$s, mean energy 3681 $\mu$J.}
+\label{tab:e8full}
+\begin{tabular}{c ccc ccc ccc c}
+\toprule
+ & \multicolumn{3}{c}{Makespan / flat} & \multicolumn{3}{c}{Energy / flat} & \multicolumn{3}{c}{Bus bytes / flat} & \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}
+CIM units & T & H & A & T & H & A & T & H & A & Spill (A)\\
+\midrule
+\multicolumn{11}{l}{\textit{Static modality}}\\
+2 & 4.984 & 0.923 & 0.875 & 0.108 & 0.319 & 0.282 & 0.085 & 0.313 & 0.273 & 83\%\\
+4 & 2.504 & 0.923 & 0.762 & 0.108 & 0.319 & 0.255 & 0.085 & 0.313 & 0.244 & 70\%\\
+8 & 1.252 & 0.923 & 0.601 & 0.108 & 0.319 & 0.219 & 0.085 & 0.313 & 0.205 & 53\%\\
+16 & 0.637 & 0.923 & 0.424 & 0.108 & 0.319 & 0.179 & 0.085 & 0.313 & 0.162 & 34\%\\
+32 & 0.330 & 0.923 & 0.270 & 0.108 & 0.319 & 0.145 & 0.085 & 0.313 & 0.125 & 18\%\\
+64 & 0.176 & 0.923 & 0.154 & 0.108 & 0.319 & 0.121 & 0.085 & 0.313 & 0.098 & 6\%\\
+\midrule
+\multicolumn{11}{l}{\textit{Dynamic ($8\times/0.4\times$)}}\\
+2 & 5.165 & 0.926 & 0.880 & 0.079 & 0.296 & 0.260 & 0.055 & 0.290 & 0.250 & 83\%\\
+4 & 2.591 & 0.926 & 0.767 & 0.079 & 0.296 & 0.233 & 0.055 & 0.290 & 0.221 & 71\%\\
+8 & 1.306 & 0.926 & 0.606 & 0.079 & 0.296 & 0.197 & 0.055 & 0.290 & 0.182 & 54\%\\
+16 & 0.667 & 0.926 & 0.429 & 0.079 & 0.296 & 0.157 & 0.055 & 0.290 & 0.140 & 36\%\\
+32 & 0.338 & 0.926 & 0.275 & 0.079 & 0.296 & 0.123 & 0.055 & 0.290 & 0.103 & 20\%\\
+64 & 0.184 & 0.926 & 0.160 & 0.079 & 0.296 & 0.098 & 0.055 & 0.290 & 0.076 & 9\%\\
+\bottomrule
+\end{tabular}
+\end{table}

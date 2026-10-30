@@ -1,0 +1,67 @@
+\begin{table}[h]
+\centering\scriptsize\setlength{\tabcolsep}{3pt}
+\caption{E9 in full: change against static modality (\%, mean over 42 traces, paired-bootstrap 95\% CI in brackets). Scale = migration cost relative to the bottom-up estimate. Moves per session; bus bytes and makespan as \% change; Win = fraction of traces with lower energy and quality loss at most 2\% worse. $^\dagger$ Post-hoc variants (see text); streaming rows for gated variants were not run (the dynamic policy makes no moves there).}
+\label{tab:e9full}
+\begin{tabular}{llcccccc}
+\toprule
+Policy & Scale & Energy & Quality loss & Moves & Bus bytes & Makespan & Win\\
+\midrule
+\multicolumn{8}{l}{\textit{Reusable (dense)}}\\
+\quad Flat (headroom) & -- & 9.25$\times$ static & -- & -- & -- & -- & --\\
+\quad Dynamic & 1$\times$ & -27.4 [-27.8, -27.0] & -2.5 [-4.0, -1.0] & 1190 & -35.6 & +4.7 & 0.88\\
+\quad Dynamic & 10$\times$ & -21.6 [-22.0, -21.1] & -2.5 [-4.0, -1.1] & 1190 & -35.6 & +13.1 & 0.88\\
+\quad + reuse gate & 1$\times$ & -27.4 [-27.8, -27.0] & -2.5 [-4.0, -1.0] & 1190 & -35.6 & +4.7 & 0.88\\
+\quad + reuse gate & 10$\times$ & -21.6 [-22.0, -21.1] & -2.5 [-4.0, -1.1] & 1190 & -35.6 & +13.1 & 0.88\\
+\quad + gate, min age 8$^\dagger$ & 1$\times$ & -23.1 [-23.6, -22.5] & -5.4 [-6.7, -4.3] & 1136 & -30.0 & +4.2 & 1.00\\
+\quad + gate, min age 8$^\dagger$ & 10$\times$ & -17.5 [-18.0, -17.0] & -5.4 [-6.7, -4.2] & 1136 & -30.0 & +13.0 & 1.00\\
+\quad + gate, min age 16$^\dagger$ & 1$\times$ & -20.0 [-20.5, -19.5] & -4.0 [-5.1, -3.0] & 1115 & -26.0 & +3.7 & 1.00\\
+\quad + gate, min age 16$^\dagger$ & 10$\times$ & -14.6 [-15.0, -14.1] & -4.0 [-5.1, -3.0] & 1115 & -26.0 & +11.9 & 1.00\\
+\midrule
+\multicolumn{8}{l}{\textit{Random 30\%}}\\
+\quad Flat (headroom) & -- & 9.07$\times$ static & -- & -- & -- & -- & --\\
+\quad Dynamic & 1$\times$ & -25.1 [-25.4, -24.7] & +3.9 [+3.0, +4.8] & 1038 & -32.2 & +4.4 & 0.14\\
+\quad Dynamic & 10$\times$ & -8.5 [-8.7, -8.3] & +3.9 [+2.9, +4.8] & 1038 & -32.2 & +44.0 & 0.14\\
+\quad + reuse gate & 1$\times$ & -25.1 [-25.4, -24.7] & +3.9 [+3.0, +4.8] & 1038 & -32.2 & +4.4 & 0.14\\
+\quad + reuse gate & 10$\times$ & -5.4 [-5.5, -5.2] & +2.0 [+1.4, +2.5] & 744 & -22.1 & +34.1 & 0.45\\
+\quad + gate, min age 4$^\dagger$ & 1$\times$ & -24.9 [-25.2, -24.5] & +3.7 [+2.8, +4.6] & 1035 & -31.9 & +3.8 & 0.14\\
+\quad + gate, min age 4$^\dagger$ & 10$\times$ & -5.2 [-5.3, -5.1] & +1.8 [+1.3, +2.4] & 741 & -21.8 & +28.0 & 0.48\\
+\quad + gate, min age 8$^\dagger$ & 1$\times$ & -23.6 [-23.9, -23.2] & +2.8 [+2.0, +3.7] & 1021 & -30.2 & +2.9 & 0.29\\
+\quad + gate, min age 8$^\dagger$ & 10$\times$ & -3.6 [-3.7, -3.5] & +0.7 [+0.2, +1.1] & 687 & -18.7 & +23.1 & 0.86\\
+\quad + gate, min age 16$^\dagger$ & 1$\times$ & -19.6 [-19.9, -19.2] & +1.0 [+0.4, +1.6] & 983 & -25.0 & +1.5 & 0.71\\
+\quad + gate, min age 16$^\dagger$ & 10$\times$ & -0.8 [-0.9, -0.7] & -0.1 [-0.5, +0.2] & 586 & -13.0 & +22.7 & 1.00\\
+\midrule
+\multicolumn{8}{l}{\textit{Random 10\%}}\\
+\quad Flat (headroom) & -- & 8.58$\times$ static & -- & -- & -- & -- & --\\
+\quad Dynamic & 1$\times$ & -15.8 [-16.0, -15.5] & +5.7 [+5.2, +6.2] & 1064 & -19.1 & +18.6 & 0.00\\
+\quad Dynamic & 10$\times$ & +32.1 [+31.7, +32.6] & +5.7 [+5.2, +6.2] & 1064 & -19.1 & +186.2 & 0.00\\
+\quad + reuse gate & 1$\times$ & -15.8 [-16.0, -15.5] & +5.7 [+5.2, +6.2] & 1059 & -19.1 & +18.5 & 0.00\\
+\quad + reuse gate & 10$\times$ & +2.2 [+2.1, +2.2] & +0.5 [+0.4, +0.6] & 91 & -2.4 & +15.7 & 0.00\\
+\quad + gate, min age 4$^\dagger$ & 1$\times$ & -15.8 [-16.0, -15.5] & +5.7 [+5.2, +6.2] & 1059 & -19.1 & +18.5 & 0.00\\
+\quad + gate, min age 4$^\dagger$ & 10$\times$ & +2.1 [+2.1, +2.2] & +0.5 [+0.4, +0.6] & 91 & -2.4 & +15.5 & 0.00\\
+\quad + gate, min age 8$^\dagger$ & 1$\times$ & -15.5 [-15.8, -15.3] & +5.5 [+5.1, +6.0] & 1057 & -18.8 & +16.4 & 0.00\\
+\quad + gate, min age 8$^\dagger$ & 10$\times$ & +1.1 [+1.0, +1.1] & +0.1 [+0.1, +0.2] & 42 & -1.0 & +7.3 & 0.00\\
+\quad + gate, min age 16$^\dagger$ & 1$\times$ & -14.3 [-14.5, -14.0] & +4.8 [+4.4, +5.2] & 1048 & -17.2 & +11.1 & 0.00\\
+\quad + gate, min age 16$^\dagger$ & 10$\times$ & +0.1 [+0.1, +0.1] & +0.0 [-0.0, +0.0] & 4 & -0.1 & +0.8 & 0.00\\
+\midrule
+\multicolumn{8}{l}{\textit{Random 3\%}}\\
+\quad Flat (headroom) & -- & 7.25$\times$ static & -- & -- & -- & -- & --\\
+\quad Dynamic & 1$\times$ & +2.1 [+2.0, +2.2] & +2.6 [+2.4, +2.9] & 645 & +4.3 & +35.6 & 0.00\\
+\quad Dynamic & 10$\times$ & +81.9 [+80.5, +83.3] & +2.6 [+2.4, +2.8] & 645 & +4.3 & +353.7 & 0.00\\
+\quad + reuse gate & 1$\times$ & +1.5 [+1.4, +1.6] & +2.6 [+2.4, +2.8] & 598 & +3.4 & +33.0 & 0.00\\
+\quad + reuse gate & 10$\times$ & +1.1 [+1.0, +1.2] & +0.1 [+0.0, +0.1] & 9 & -0.0 & +5.2 & 0.00\\
+\quad + gate, min age 4$^\dagger$ & 1$\times$ & +1.5 [+1.4, +1.6] & +2.6 [+2.4, +2.8] & 598 & +3.4 & +33.0 & 0.00\\
+\quad + gate, min age 4$^\dagger$ & 10$\times$ & +1.1 [+1.0, +1.2] & +0.1 [+0.0, +0.1] & 9 & -0.0 & +5.2 & 0.00\\
+\quad + gate, min age 8$^\dagger$ & 1$\times$ & +1.5 [+1.4, +1.6] & +2.6 [+2.4, +2.8] & 598 & +3.5 & +33.0 & 0.00\\
+\quad + gate, min age 8$^\dagger$ & 10$\times$ & +0.1 [+0.1, +0.2] & +0.0 [+0.0, +0.0] & 1 & -0.0 & +0.7 & 0.00\\
+\quad + gate, min age 16$^\dagger$ & 1$\times$ & +1.7 [+1.6, +1.8] & +2.4 [+2.2, +2.7] & 596 & +3.6 & +30.7 & 0.00\\
+\quad + gate, min age 16$^\dagger$ & 10$\times$ & +0.0 [+0.0, +0.0] & +0.0 [+0.0, +0.0] & 0 & +0.0 & +0.0 & 0.00\\
+\midrule
+\multicolumn{8}{l}{\textit{Streaming}}\\
+\quad Flat (headroom) & -- & 7.28$\times$ static & -- & -- & -- & -- & --\\
+\quad Dynamic & 1$\times$ & +0.0 [+0.0, +0.0] & +0.0 [+0.0, +0.0] & 0 & +0.0 & +0.0 & 0.00\\
+\quad Dynamic & 10$\times$ & +0.0 [+0.0, +0.0] & +0.0 [+0.0, +0.0] & 0 & +0.0 & +0.0 & 0.00\\
+\quad + reuse gate & 1$\times$ & +0.0 [+0.0, +0.0] & +0.0 [+0.0, +0.0] & 0 & +0.0 & +0.0 & 0.00\\
+\quad + reuse gate & 10$\times$ & +0.0 [+0.0, +0.0] & +0.0 [+0.0, +0.0] & 0 & +0.0 & +0.0 & 0.00\\
+\bottomrule
+\end{tabular}
+\end{table}
